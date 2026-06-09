@@ -9,3 +9,4 @@ pytest
 pandas
 python-dotenv
 tqdm
+rich
