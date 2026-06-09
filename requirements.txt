@@ -10,3 +10,6 @@ pandas
 python-dotenv
 tqdm
 rich
+fastapi
+uvicorn
+sse-starlette

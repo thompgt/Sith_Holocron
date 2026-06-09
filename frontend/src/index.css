@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sith-red: #E50914;
+  --sith-glow: rgba(229, 9, 20, 0.6);
+  --obsidian: #0B0C10;
+  --charcoal: #1F2833;
+  --steel: #C5C6C7;
+}
+
+body {
+  margin: 0;
+  background-color: var(--obsidian);
+  color: var(--steel);
+  font-family: 'Share Tech Mono', monospace;
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* CRT Scanline Effect */
+.crt-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%,
+    rgba(0, 0, 0, 0.25) 50%
+  ),
+  linear-gradient(
+    90deg,
+    rgba(255, 0, 0, 0.06),
+    rgba(0, 255, 0, 0.02),
+    rgba(0, 0, 255, 0.06)
+  );
+  background-size: 100% 4px, 3px 100%;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.glow-text {
+  text-shadow: 0 0 10px var(--sith-glow), 0 0 20px var(--sith-glow);
+}
+
+.sith-border {
+  border: 1px solid var(--sith-red);
+  box-shadow: inset 0 0 10px var(--sith-glow), 0 0 10px var(--sith-glow);
+}
+
+.angular-box {
+  clip-path: polygon(
+    0% 10px, 10px 0%, 
+    calc(100% - 10px) 0%, 100% 10px, 
+    100% calc(100% - 10px), calc(100% - 10px) 100%, 
+    10px 100%, 0% calc(100% - 10px)
+  );
+}
+
+@keyframes pulse-red {
+  0% { box-shadow: 0 0 10px var(--sith-glow); }
+  50% { box-shadow: 0 0 30px var(--sith-red); }
+  100% { box-shadow: 0 0 10px var(--sith-glow); }
+}
+
+.holocron-core {
+  animation: pulse-red 4s infinite ease-in-out;
+}

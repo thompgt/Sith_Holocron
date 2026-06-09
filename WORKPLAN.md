@@ -18,6 +18,12 @@
 - [ ] **Task 9**: Create the Chat Completion wrapper to handle streaming and history management.
 
 ## Phase 5: Verification & UI
-- [ ] **Task 10**: Implement the "Persona Audit" test suite to verify tone and factual grounding.
-- [ ] **Task 11**: Develop a simple CLI or Streamlit interface for interacting with the Holocron.
+- [x] **Task 10**: Implement the "Persona Audit" test suite to verify tone and factual grounding.
+- [x] **Task 11**: Develop a simple CLI or Streamlit interface for interacting with the Holocron.
 - [ ] **Task 12**: Final E2E system stress test and documentation of "The Sith Way" (User Guide).
+
+## Phase 6: Web Migration (React + FastAPI)
+- [ ] **Task 13**: Implement FastAPI backend with streaming chat (SSE).
+- [ ] **Task 14**: Bootstrap Vite + React frontend with custom CSS (Holocron theme).
+- [ ] **Task 15**: Implement interactive chat UI with persona selection and CRT effects.
+- [ ] **Task 16**: Final E2E web validation and deployment guide.
