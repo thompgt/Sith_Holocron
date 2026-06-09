@@ -2,6 +2,7 @@ langchain
 langchain-community
 langchain-openai
 faiss-cpu
+langchain-google-genai
 langchain-huggingface
 sentence-transformers
 pytest
