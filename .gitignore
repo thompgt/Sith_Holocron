@@ -21,3 +21,11 @@ Thumbs.db
 node_modules/
 dist/
 build/
+
+# Generated vector stores
+data/vector_store/
+data/test_vector_db/
+data/hybrid_test_db/
+
+# Test caches
+.pytest_cache/
