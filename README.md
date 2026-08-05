@@ -11,6 +11,15 @@ injected into a persona system prompt before a Gemini model streams its reply. T
 Rich-powered terminal CLI and a React/Vite web UI with a CRT-scanline "holocron" theme talking to a FastAPI
 SSE endpoint.
 
+## Tech Stack
+
+![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)
+![FAISS](https://img.shields.io/badge/FAISS-0668E1?style=for-the-badge)
+![Google Gemini](https://img.shields.io/badge/Google_Gemini-8E75B2?style=for-the-badge&logo=googlegemini&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black)
+
 ---
 
 ## Screenshots
