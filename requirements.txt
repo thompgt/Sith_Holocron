@@ -13,3 +13,5 @@ rich
 fastapi
 uvicorn
 sse-starlette
+prometheus-client
+prometheus-fastapi-instrumentator
