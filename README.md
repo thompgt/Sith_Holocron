@@ -1,17 +1,6 @@
 # Sith Holocron
 
-> *"Power resides in the Dark Side."*
-
-**Sith Holocron** is a Retrieval-Augmented Generation (RAG) system that lets you interrogate an interactive
-Sith artifact. It indexes two very different corpora — factual Star Wars lore scraped from Wookieepedia and
-raw screenplay dialogue from the films — into a single FAISS vector index, then answers your questions in the
-voice of Darth Vader, Emperor Palpatine, or a generic Sith Lord. The retrieval layer is deliberately *hybrid*:
-lore chunks supply the facts, character dialogue chunks supply the cadence and vocabulary, and both are
-injected into a persona system prompt before a Gemini model streams its reply. There are two front ends — a
-Rich-powered terminal CLI and a React/Vite web UI with a CRT-scanline "holocron" theme talking to a FastAPI
-SSE endpoint.
-
-## Tech Stack
+> A retrieval-augmented Star Wars artifact: ask a question, get an answer grounded in Wookieepedia lore and delivered in the voice of Darth Vader, Emperor Palpatine, or a generic Sith Lord.
 
 ![RAG](https://img.shields.io/badge/RAG-5A4FCF?style=for-the-badge&logo=llamaindex&logoColor=white)
 ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)
@@ -19,10 +8,7 @@ SSE endpoint.
 ![Google Gemini](https://img.shields.io/badge/Google_Gemini-8E75B2?style=for-the-badge&logo=googlegemini&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![React](https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black)
-
----
-
-## Screenshots
+![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=for-the-badge&logo=prometheus&logoColor=white)
 
 ![Sith Holocron landing state — persona sidebar and idle holocron core](docs/images/holocron-landing.png)
 
@@ -36,37 +22,120 @@ every request and drives both the retrieval filter and the system prompt.*
 
 ---
 
-## What it does
+## Why this matters
 
-- **Ingests two source types.** `LoreProcessor` chunks Wookieepedia JSON articles with a recursive character
-  splitter (500 chars, 50 overlap). `ScriptParser` reads screenplay CSVs and tab-separated dialogue text files
-  into one `Document` per line, tagged with `character` and `type: "dialogue"`.
-- **Embeds locally.** Sentence-Transformers `all-MiniLM-L6-v2` via `langchain-huggingface` — no embedding API
-  cost, no key required for indexing.
-- **Stores vectors in FAISS**, persisted to disk as `sith_holocron_index.faiss` / `.pkl`.
-- **Retrieves hybridly.** `HybridRetriever` over-fetches (`k*3`), splits hits into lore vs. dialogue, filters
-  dialogue down to the selected character, then rebalances to `k` results using a `lore_weight` (default 0.5),
-  backfilling from whichever pool has surplus.
-- **Builds a persona prompt.** `PersonaManager` renders a per-character system prompt with hard
-  never-break-character constraints, and formats retrieved docs into two labelled blocks —
-  `LORE CONTEXT` (grounding) and `PAST UTTERANCES` (style).
-- **Streams the answer.** `GeminiChatWrapper` wraps `ChatGoogleGenerativeAI` (`gemini-1.5-flash`); the FastAPI
-  route re-emits each chunk as a Server-Sent Event, and the React client appends tokens as they arrive.
-- **Audits the persona.** `tests/persona_audit.py` runs a full RAG cycle and applies heuristic checks for
-  character consistency and whether retrieved lore actually made it into the answer.
+Persona-driven assistants are usually built one of two ways, and both ways fail in a specific manner:
 
-## Tech stack
+- **Prompt-only personas** ("you are Darth Vader") produce a character who sounds vaguely right but invents
+  facts freely, because nothing constrains what the model can claim.
+- **Plain RAG** grounds the facts but flattens the voice, because the retrieved context is all encyclopedia
+  prose and the model regresses to a neutral assistant register.
 
-- **Backend:** Python 3.13, LangChain (`langchain`, `langchain-community`, `langchain-google-genai`,
-  `langchain-huggingface`), `faiss-cpu` for vector storage, `sentence-transformers` for embeddings,
-  FastAPI + Uvicorn for the streaming API, `rich` for the CLI, `pandas` for script/CSV parsing,
-  `pytest` for tests.
-- **LLM:** Google Gemini `gemini-1.5-flash`, via `GOOGLE_API_KEY`. (`requirements.txt` also lists
-  `langchain-openai` and `sse-starlette`, but neither is currently wired up — the SSE stream is hand-rolled
-  with FastAPI's `StreamingResponse`.)
-- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS, Framer Motion, Lucide icons.
+Sith Holocron treats *facts* and *voice* as two separate retrieval problems solved over one index. Encyclopedic
+lore chunks are retrieved to ground claims; actual screenplay lines spoken by the selected character are
+retrieved alongside them as stylistic exemplars, and the two are injected into the prompt under distinct
+labels (`LORE CONTEXT` vs. `PAST UTTERANCES`). The retriever deliberately rebalances the result set so neither
+pool can starve the other. That is a general pattern — grounded-and-in-voice retrieval — that applies to any
+brand voice, support agent, or character-driven product, not just a Sith artifact.
+
+The second thing this repo takes seriously is that **a streaming LLM endpoint hides its own failures**. Once an
+SSE response has sent headers, an exception mid-stream cannot become an HTTP 5xx: the request looks like a
+clean 200 forever. A dead API key or a provider outage would appear as perfectly healthy traffic in any
+HTTP-level dashboard. The observability layer here exists specifically to make that class of failure visible,
+with domain metrics recorded inside the SSE generator where it is the only signal available.
+
+## Skills demonstrated
+
+**Retrieval-augmented generation**
+- Two-corpus ingestion with different structures (JSON articles vs. line-level screenplay dialogue) normalized
+  into one `Document` schema with type/character metadata.
+- Recursive character chunking (`RecursiveCharacterTextSplitter`, 500 chars / 50 overlap) for prose.
+- Custom hybrid retriever: `k*3` over-fetch, metadata partitioning, persona filtering, `lore_weight`-driven
+  rebalancing, and surplus backfill when one pool is short.
+- Prompt engineering with role separation, explicit anti-hallucination constraints, and a
+  never-break-character contract.
+- Local embeddings (Sentence-Transformers) to keep indexing free of API cost and API keys.
+
+**Backend engineering (Python)**
+- FastAPI service with Server-Sent Events streaming, hand-rolled over `StreamingResponse` — including the
+  generator-lifecycle edge cases (`GeneratorExit`/`CancelledError` on client disconnect handled in `finally`).
+- Layered package design (`ingestion` / `retrieval` / `llm` / `api` / `observability`) with dependency
+  injection between layers.
+- A second, independent frontend over the same core: a `rich`-powered terminal client with live token
+  rendering and first-run index bootstrapping.
+
+**Observability / SRE**
+- Prometheus instrumentation designed around what the HTTP layer *cannot* see: chat outcome counters inside
+  the SSE except-block, time-to-first-token measured at two altitudes (endpoint vs. model) so the RAG layer's
+  own cost is the gap between them, retrieval lore:dialogue ratio as proof the rebalance works, and startup
+  gauges answering "is the index even loaded?"
+- Deliberate label-cardinality control: caller-supplied `persona` is normalized through an allowlist so an
+  attacker cannot mint unbounded time series.
+- Fully provisioned local Prometheus + Grafana stack via Docker Compose (datasource and dashboard providers in
+  git, non-default ports to avoid collisions, `host.docker.internal` scraping of a host-run backend).
+
+**Frontend**
+- React 19 + TypeScript + Vite, Tailwind CSS, Framer Motion animation, Lucide icons.
+- Manual SSE consumption via the `fetch` `ReadableStream` reader, parsing `data:` frames and mutating the
+  trailing assistant message per chunk for a live-typing effect.
+
+**Data engineering & testing**
+- Web scraping (`requests` + BeautifulSoup) of Fandom articles into a structured lore corpus.
+- Script normalization across heterogeneous formats (`;`-delimited CSVs, tab-separated dialogue text).
+- Instruction-tuning dataset synthesis into Alpaca-style JSONL.
+- `pytest` unit suite across parsers, vector store, retriever, persona manager, and the LLM wrapper, plus a
+  `PersonaAuditor` that runs a full RAG cycle and applies heuristic tone/grounding checks.
 
 ## Architecture
+
+### Models
+
+| Role | Model | Where |
+| --- | --- | --- |
+| **Generation (LLM)** | Google Gemini `gemini-1.5-flash`, temperature 0.7, via `langchain-google-genai`'s `ChatGoogleGenerativeAI`; streaming and non-streaming paths | `src/llm/gemini_wrapper.py` |
+| **Embeddings** | `sentence-transformers/all-MiniLM-L6-v2` (384-dim) run locally through `langchain-huggingface` | `src/retrieval/vector_store.py` |
+| **Vector index** | FAISS flat index, persisted as `sith_holocron_index.faiss` + `.pkl` | `data/vector_store/` |
+
+No model is fine-tuned. `scripts/synthesize_dataset.py` produces an instruction-tuning JSONL
+(`data/processed/sith_holocron_dataset.jsonl`) as a prepared artifact, but nothing in the runtime consumes it —
+persona behaviour comes entirely from retrieval plus prompting.
+
+**Data model.** Everything in the index is a LangChain `Document` with `page_content` plus metadata:
+
+- *Lore* — `{title, url, source}`; `type` is absent and defaults to `"lore"` at read time.
+- *Dialogue* — `{character, source, type: "dialogue"}`.
+
+That single `type` field is what the hybrid retriever partitions on and what `PersonaManager.format_context`
+uses to decide whether a snippet is evidence or a voice sample.
+
+### Component layout
+
+| Path | Purpose |
+| --- | --- |
+| `src/main.py` | Interactive Rich CLI; also bootstraps the vector index if it does not exist. |
+| `src/api/server.py` | FastAPI app: `GET /api/personas`, SSE-streaming `POST /api/chat`, `GET /metrics`. Instantiates the RAG engine at import. |
+| `src/ingestion/lore_processor.py` | Loads Wookieepedia JSON and chunks it into `Document`s with title/url metadata. |
+| `src/ingestion/script_parser.py` | Parses screenplay CSV and tab-separated dialogue files into per-line `Document`s tagged by character. |
+| `src/retrieval/vector_store.py` | `VectorStoreManager` — embeddings, FAISS index creation, similarity search, save/load. |
+| `src/retrieval/hybrid_retriever.py` | Balances lore vs. character dialogue and applies the persona filter. |
+| `src/llm/persona_manager.py` | Persona definitions, system-prompt templates, and context formatting. |
+| `src/llm/gemini_wrapper.py` | Gemini chat wrapper with `chat()` and `stream_chat()`. |
+| `src/observability/metrics.py` | Prometheus metric families (`holocron_*`) and persona label normalization. |
+| `frontend/src/App.tsx` | React chat UI: persona sidebar, SSE stream reader, CRT/holocron styling. |
+| `frontend/src/index.css`, `frontend/tailwind.config.js` | Holocron theme and the custom `sith-*` palette (red, glow, obsidian, charcoal, steel). |
+| `scripts/scrape_wookieepedia.py` | Scrapes eight Fandom pages into `data/raw/wookieepedia_lore.json`. |
+| `scripts/parse_scripts.py` | Normalizes OT text + prequel CSVs into `data/processed/star_wars_dialogues.json`. |
+| `scripts/synthesize_dataset.py` | Builds the instruction-tuning JSONL from dialogue + lore. |
+| `tests/` | `pytest` suite for parsers, vector store, retriever, persona manager, and Gemini wrapper. |
+| `tests/persona_audit.py` | `PersonaAuditor` — end-to-end RAG cycle plus heuristic tone/grounding checks. |
+| `data/raw/` | Source corpora: lore JSON, prequel CSVs, original-trilogy script text. |
+| `data/processed/` | Normalized dialogue JSON and the synthesized instruction dataset. |
+| `data/vector_store/` | Generated FAISS index (gitignored). |
+| `monitoring/` | Docker Compose Prometheus + Grafana stack with file-based provisioning. |
+| `PROTOCOL.md` | Engineering and validation protocol (red-green-refactor, commit gatekeeping, RAG QC). |
+| `WORKPLAN.md` | Phased task breakdown, Phases 1–6. |
+
+### Flow
 
 ```mermaid
 flowchart TD
@@ -100,11 +169,17 @@ flowchart TD
     subgraph API["FastAPI — src/api/server.py"]
         G1["GET /api/personas"]
         G2["POST /api/chat<br/>StreamingResponse, text/event-stream"]
+        G3["GET /metrics"]
     end
 
     subgraph UI["Clients"]
         H1["React + Vite web UI<br/>frontend/src/App.tsx"]
         H2["Rich terminal CLI<br/>src/main.py"]
+    end
+
+    subgraph Obs["Observability — monitoring/"]
+        I1["Prometheus"]
+        I2["Grafana"]
     end
 
     A1 --> B1 --> C1
@@ -123,41 +198,61 @@ flowchart TD
 
     H2 -- "query + persona" --> D1
     F -- "rich.live stream" --> H2
+
+    G3 -- "scrape 5s" --> I1 --> I2
 ```
 
-### Request lifecycle
+## How it works
 
-1. **Page load.** The React app calls `GET http://localhost:8000/api/personas`. FastAPI returns the three
+1. **Acquire and index.** `scripts/scrape_wookieepedia.py` pulls Fandom articles; `scripts/parse_scripts.py`
+   normalizes the film scripts. At runtime, `LoreProcessor` chunks the lore JSON and `ScriptParser` turns each
+   script line into a `Document`. `VectorStoreManager` embeds everything with `all-MiniLM-L6-v2` and writes a
+   FAISS index to `data/vector_store/`. The CLI does this automatically on first launch if no index is found;
+   the API server only *loads* an existing one.
+2. **Page load.** The React app calls `GET http://localhost:8000/api/personas`. FastAPI returns the three
    personas defined in `PersonaManager.personas`, which populate the sidebar.
-2. **Send.** The user picks a persona and submits a question. The client `POST`s
-   `{ message, persona }` to `/api/chat`.
-3. **Retrieve.** The handler calls `HybridRetriever.retrieve(message, character=persona, k=4)`. That issues a
+3. **Send.** The user picks a persona and submits a question. The client `POST`s `{ message, persona }` to
+   `/api/chat`.
+4. **Retrieve.** The handler calls `HybridRetriever.retrieve(message, character=persona, k=4)`. That issues a
    FAISS similarity search for 12 candidates, partitions them by `metadata["type"]`, drops dialogue lines
    spoken by anyone other than the selected character, and returns a balanced 4 — roughly half lore, half
-   in-character dialogue.
-4. **Assemble the prompt.** `PersonaManager.format_context` renders the survivors into `--- LORE CONTEXT ---`
+   in-character dialogue, backfilling from whichever pool has surplus if one comes up short.
+5. **Assemble the prompt.** `PersonaManager.format_context` renders the survivors into `--- LORE CONTEXT ---`
    and `--- PAST UTTERANCES (FOR STYLISTIC REFERENCE) ---` sections. `get_system_prompt` produces the
    in-character system message with the anti-hallucination and never-break-character rules.
-5. **Generate.** `GeminiChatWrapper.stream_chat` sends `[SystemMessage, HumanMessage(context + query)]` to
+6. **Generate.** `GeminiChatWrapper.stream_chat` sends `[SystemMessage, HumanMessage(context + query)]` to
    `gemini-1.5-flash` and yields content chunks as they arrive.
-6. **Stream out.** The endpoint's async generator wraps each chunk as `data: {"content": "..."}\n\n` and
+7. **Stream out.** The endpoint's async generator wraps each chunk as `data: {"content": "..."}\n\n` and
    terminates with `data: [DONE]`, returned as a `StreamingResponse` with media type `text/event-stream`.
-   Exceptions are surfaced as `data: {"error": "..."}`.
-7. **Render.** The browser reads the response body with a `ReadableStream` reader, parses `data:` lines, and
+   Exceptions become `data: {"error": "..."}` frames — still HTTP 200, which is exactly why they are counted
+   explicitly in `holocron_chat_errors_total`.
+8. **Render.** The browser reads the response body with a `ReadableStream` reader, parses `data:` lines, and
    mutates the last assistant message on each token, producing the live-typing effect.
+9. **Observe.** Every stage above records to the Prometheus default registry, served at `/metrics` together
+   with `prometheus-fastapi-instrumentator`'s HTTP metrics. Prometheus scrapes it every 5s; Grafana reads
+   Prometheus.
 
-The CLI (`src/main.py`) runs steps 3–5 identically, rendering the stream with `rich.live.Live` instead of
-HTTP. It also bootstraps the index on first run if `data/vector_store/` is missing.
+The CLI (`src/main.py`) runs steps 4–6 identically, rendering the stream with `rich.live.Live` instead of HTTP.
+It has no HTTP server, so its metrics are never scraped.
 
----
+### Metrics reference
 
-## Quickstart
+| Family | Answers |
+| --- | --- |
+| `holocron_retrieval_duration_seconds`, `holocron_retrieval_returned_documents` | Is retrieval fast, and is it returning fewer than `k` (empty index / over-aggressive filter)? |
+| `holocron_retrieval_documents_total{source_type}`, `holocron_retrieval_candidates_total` | What lore:dialogue ratio did the LLM actually see, and how much did the persona filter discard? |
+| `holocron_llm_requests_total`, `holocron_llm_time_to_first_chunk_seconds`, `holocron_llm_stream_duration_seconds`, `holocron_llm_stream_chunks_total`, `holocron_llm_{prompt,response}_characters_total` | Is Gemini healthy, how long is its think time, how much text moved? (Chunks/characters are proxies — the streaming API reports no token count.) |
+| `holocron_chat_requests_total`, `holocron_chat_errors_total`, `holocron_chat_time_to_first_token_seconds`, `holocron_chat_stream_duration_seconds`, `holocron_chat_client_disconnects_total` | Endpoint-level outcomes, including the failures HTTP status codes cannot express. |
+| `holocron_index_loaded`, `holocron_index_vectors`, `holocron_index_documents`, `holocron_index_dimension`, `holocron_personas_loaded` | Startup facts — is the index loaded at all? |
+
+## How to run
 
 ### Prerequisites
 
-- Python 3.13 (a `venv/` is already present in this checkout)
-- Node.js 18+ for the web UI
-- A Google Gemini API key
+- **Python 3.13** (a `venv/` is present in this checkout)
+- **Node.js 18+** for the web UI
+- **A Google Gemini API key**
+- **Docker** (optional) for the monitoring stack
 
 ### 1. Backend setup
 
@@ -173,21 +268,25 @@ Create a `.env` file in the repo root:
 GOOGLE_API_KEY=your-gemini-api-key
 ```
 
-Without this key the API server fails at import time — `ChatGoogleGenerativeAI` validates the key in its
-constructor, and `src/api/server.py` instantiates the wrapper at module scope.
+`GOOGLE_API_KEY` is the only environment variable the application reads. Without it the API server fails at
+import time — `ChatGoogleGenerativeAI` validates the key in its constructor and `src/api/server.py`
+instantiates the wrapper at module scope.
+
+> `scripts/scrape_wookieepedia.py` additionally needs `requests` and `beautifulsoup4`, which are **not** in
+> `requirements.txt`. Install them separately if you want to re-scrape:
+> `pip install requests beautifulsoup4`.
 
 ### 2. Build the index
 
-The vector store lives at `data/vector_store/` and is **not** committed. The CLI builds it automatically on
-first launch from whatever raw data is present:
+`data/vector_store/` is gitignored. The CLI builds it on first launch from whatever raw data is present:
 
 ```bash
 python -m src.main
 ```
 
-You will see `Holocron energy low. Initializing data core...` while it embeds, then
-`Data core stabilized.` once `data/vector_store/sith_holocron_index.faiss` is written. The web backend only
-*loads* an existing index, so run the CLI once before starting the server.
+You will see `Holocron energy low. Initializing data core...` while it embeds, then `Data core stabilized.`
+once `data/vector_store/sith_holocron_index.faiss` is written. Run this once before starting the web backend,
+which only loads an existing index.
 
 ### 3. Run the web app
 
@@ -201,23 +300,41 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:5180>. The frontend hardcodes `http://localhost:8000` as the API origin, so keep the
-backend on port 8000.
+Open <http://localhost:5180>. The frontend hardcodes `http://localhost:8000` as the API origin
+(`frontend/src/App.tsx`), so keep the backend on port 8000. The Vite dev port (5180) is set in
+`frontend/vite.config.ts`.
 
 > **Known issue:** `frontend/package.json` pins `tailwindcss@^4`, but the styles use Tailwind v3 syntax
 > (`@tailwind base;` in `src/index.css`, `tailwind.config.js`, and `tailwindcss` as a direct PostCSS plugin).
 > A fresh `npm install && npm run dev` therefore fails with *"trying to use `tailwindcss` directly as a
 > PostCSS plugin"*. Until the pin is corrected, run `npm install tailwindcss@3.4.17` in `frontend/`.
 
-### 4. Run the tests
+### 4. Run the monitoring stack (optional)
+
+```bash
+cd monitoring
+docker compose up -d
+```
+
+- Grafana: <http://localhost:3005> (`admin` / `admin`; anonymous viewing is enabled for local demos)
+- Prometheus: <http://localhost:9094>
+- Raw metrics: <http://localhost:8000/metrics>
+
+The backend runs on the host, not in Compose — Prometheus scrapes it via `host.docker.internal:8000`. If you
+move the backend, edit `monitoring/prometheus/prometheus.yml` and reload without restarting:
+`curl -X POST http://localhost:9094/-/reload`. Grafana's datasource is provisioned automatically; the
+dashboard provider watches `monitoring/grafana/dashboards/`, which currently holds no committed dashboard
+JSON, so build panels in the UI or drop a JSON file there.
+
+### 5. Run the tests
 
 ```bash
 pytest
 ```
 
-## Usage
+### Other commands
 
-**Terminal:**
+**Chat from the terminal:**
 
 ```bash
 python -m src.main
@@ -225,7 +342,7 @@ python -m src.main
 
 Choose a persona by number, then chat. `exit`, `quit`, or `bye` closes the holocron.
 
-**HTTP:**
+**Chat over HTTP:**
 
 ```bash
 curl -N -X POST http://localhost:8000/api/chat \
@@ -233,9 +350,10 @@ curl -N -X POST http://localhost:8000/api/chat \
   -d '{"message": "Tell me of the power of the dark side.", "persona": "PALPATINE"}'
 ```
 
-Valid `persona` values: `VADER`, `PALPATINE`, `GENERIC_SITH`. Unknown values fall back to `GENERIC_SITH`.
+Valid `persona` values: `VADER`, `PALPATINE`, `GENERIC_SITH`. Unknown values fall back to `GENERIC_SITH` in the
+prompt and to the `other` label in metrics.
 
-**Data preparation helpers** (only needed to regenerate the raw corpora):
+**Regenerate the corpora** (only needed to rebuild raw data):
 
 ```bash
 python scripts/scrape_wookieepedia.py   # scrape Fandom lore pages -> data/raw/wookieepedia_lore.json
@@ -243,36 +361,17 @@ python scripts/parse_scripts.py         # normalize film scripts -> data/process
 python scripts/synthesize_dataset.py    # build an instruction-tuning JSONL from the dialogue set
 ```
 
-## Project structure
+**Frontend scripts** (from `frontend/`): `npm run dev`, `npm run build`, `npm run preview`, `npm run lint`.
 
-| Path | Purpose |
-| --- | --- |
-| `src/api/server.py` | FastAPI app: `/api/personas` and the SSE-streaming `/api/chat`. Instantiates the RAG engine at startup. |
-| `src/main.py` | Interactive Rich CLI; also bootstraps the vector index if it does not exist. |
-| `src/ingestion/lore_processor.py` | Loads Wookieepedia JSON and chunks it into `Document`s with title/url metadata. |
-| `src/ingestion/script_parser.py` | Parses screenplay CSV and tab-separated dialogue files into per-line `Document`s tagged by character. |
-| `src/retrieval/vector_store.py` | `VectorStoreManager` — embeddings, FAISS index creation, similarity search, save/load. |
-| `src/retrieval/hybrid_retriever.py` | Balances lore vs. character dialogue and applies the persona filter. |
-| `src/llm/persona_manager.py` | Persona definitions, system-prompt templates, and context formatting. |
-| `src/llm/gemini_wrapper.py` | Gemini chat wrapper with `chat()` and `stream_chat()`. |
-| `frontend/src/App.tsx` | React chat UI: persona sidebar, SSE stream reader, CRT/holocron styling. |
-| `frontend/tailwind.config.js` | Custom `sith-*` palette (red, glow, obsidian, charcoal, steel). |
-| `scripts/` | One-off data acquisition and preparation scripts. |
-| `tests/` | `pytest` suite for parsers, vector store, retriever, persona manager, and Gemini wrapper. |
-| `tests/persona_audit.py` | `PersonaAuditor` — end-to-end RAG cycle plus heuristic tone/grounding checks. |
-| `data/raw/` | Source corpora: Wookieepedia lore JSON, prequel CSVs, original-trilogy script text. |
-| `data/processed/` | Normalized dialogue JSON and the synthesized instruction dataset. |
-| `PROTOCOL.md` | Engineering and validation protocol (red-green-refactor, commit gatekeeping, RAG QC). |
-| `WORKPLAN.md` | Phased task breakdown, Phases 1–6. |
+---
 
 ## Project status
 
 Per `WORKPLAN.md`, Phases 1–5 are complete: ingestion, indexing, hybrid retrieval, persona prompting, the
 Gemini wrapper, the persona audit framework, and the CLI. Phase 6 (web migration) delivered the FastAPI
-streaming backend and the React holocron UI. Still outstanding: persona-filter/hybrid-search tuning, the
-end-to-end stress test, and a deployment guide.
-
-## Documents & conventions
+streaming backend and the React holocron UI, since extended with a Prometheus/Grafana observability layer.
+Still outstanding: persona-filter/hybrid-search tuning, the end-to-end stress test, a committed Grafana
+dashboard, and a deployment guide.
 
 Development follows `PROTOCOL.md`: tests first, `pytest` green before every commit, no hardcoded secrets, and
 a persona audit plus context logging for any change touching retrieval or prompting.
