@@ -1,0 +1,38 @@
+# Scrape config for the Sith Holocron backend.
+#
+# The backend runs on the host (uvicorn src.api.server:app --port 8000), not inside this
+# Compose project, so the target is host.docker.internal rather than a service name.
+#
+# NOTE ON PORT 8000: the frontend hardcodes http://localhost:8000 (frontend/src/App.tsx),
+# so the API cannot simply be moved. 8000 is also a popular default shared with other local
+# projects on this machine — only one of them can hold the port at a time, and if another
+# process has it, this job will happily scrape *that* process instead and the dashboard will
+# fill with someone else's metrics. If you do relocate the backend, change the target below
+# and reload Prometheus without restarting the container:
+#
+#   curl -X POST http://localhost:9094/-/reload
+#
+# (The reload endpoint is enabled by --web.enable-lifecycle in docker-compose.yml.)
+
+global:
+  # 5s rather than the usual 15s. Chat traffic here is hand-driven and low-volume, so a
+  # coarse interval leaves only one or two samples inside a rate() window and the streaming
+  # latency panels read as empty. Must stay in sync with the datasource's timeInterval.
+  scrape_interval: 5s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: holocron-local
+
+scrape_configs:
+  - job_name: holocron-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:8000']
+        labels:
+          component: api
+
+  # Prometheus watching itself — useful for telling "the backend is down" apart from
+  # "the scraper is down" when a panel goes empty.
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']

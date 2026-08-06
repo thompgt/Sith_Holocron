@@ -1,0 +1,17 @@
+# Provisioned at startup so Grafana comes up already pointed at Prometheus.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: holocron-prometheus
+    type: prometheus
+    access: proxy
+    # Container-to-container, so the service name and Prometheus' internal port —
+    # not the host-side 9094 mapping.
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      # Must match prometheus.yml's scrape_interval, or Grafana's $__rate_interval
+      # computes rate() windows too small to contain two samples and panels read as empty.
+      timeInterval: 5s

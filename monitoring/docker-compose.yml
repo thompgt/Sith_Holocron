@@ -1,0 +1,62 @@
+# Local monitoring stack for the Sith Holocron backend: Prometheus scrapes the FastAPI
+# app's /metrics endpoint, Grafana renders it. Both are provisioned from files in this
+# directory, so `docker compose up -d` gives a working dashboard with no clicking through
+# setup wizards.
+#
+#   cd monitoring && docker compose up -d
+#   Grafana:    http://localhost:3005  (admin / admin)
+#   Prometheus: http://localhost:9094
+#
+# The backend itself runs on the host (uvicorn src.api.server:app --port 8000), not in
+# Compose — this stack only observes it. The Rich CLI (src/main.py) is a separate process
+# with no HTTP server, so its metrics are never scraped; see README.
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: holocron-prometheus
+    restart: unless-stopped
+    ports:
+      # 9094 rather than Prometheus' default 9090, which other local projects already bind.
+      - '9094:9090'
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      # Needed for the runtime-reload used when changing the scrape target's port.
+      - '--web.enable-lifecycle'
+    extra_hosts:
+      # Lets the container reach a backend running on the host. Docker Desktop provides
+      # host.docker.internal already; this keeps the same config working on Linux.
+      - 'host.docker.internal:host-gateway'
+
+  grafana:
+    image: grafana/grafana:11.5.1
+    container_name: holocron-grafana
+    restart: unless-stopped
+    ports:
+      # 3005 rather than Grafana's default 3000, which collides with too many dev servers.
+      - '3005:3000'
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      # This is a local observability sandbox, not an internet-facing Grafana. Anonymous
+      # viewers keep screenshots and demos frictionless; do not carry this to a real
+      # deployment.
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_DEFAULT_THEME: dark
+      GF_FEATURE_TOGGLES_ENABLE: ''
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+
+volumes:
+  prometheus-data:
+  grafana-data:
