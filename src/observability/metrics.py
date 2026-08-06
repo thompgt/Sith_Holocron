@@ -67,8 +67,12 @@ RETRIEVAL_DURATION = Histogram(
 # k defaults to 4 and the retriever never returns more, but it can return *fewer*
 # when the index is empty or the persona filter drops every dialogue hit — which
 # is exactly the failure this histogram is here to make visible.
-RETRIEVAL_DOCUMENTS = Histogram(
-    "holocron_retrieval_documents",
+# Named ..._returned_documents rather than ..._documents because the Counter below
+# is holocron_retrieval_documents_total, and prometheus_client reserves that
+# counter's base name (holocron_retrieval_documents) — reusing it here raises
+# DuplicateTimeseries at import.
+RETRIEVAL_RETURNED_DOCUMENTS = Histogram(
+    "holocron_retrieval_returned_documents",
     "Number of documents returned by one retrieve() call. Below k means the "
     "index is empty or filtering removed candidates.",
     ["persona"],
