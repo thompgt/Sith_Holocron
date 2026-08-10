@@ -84,7 +84,8 @@ with domain metrics recorded inside the SSE generator where it is the only signa
 - Script normalization across heterogeneous formats (`;`-delimited CSVs, tab-separated dialogue text).
 - Instruction-tuning dataset synthesis into Alpaca-style JSONL.
 - `pytest` unit suite across parsers, vector store, retriever, persona manager, and the LLM wrapper, plus a
-  `PersonaAuditor` that runs a full RAG cycle and applies heuristic tone/grounding checks.
+  `PersonaAuditor` (`src/eval/persona_auditor.py`) that runs a full RAG cycle and applies heuristic
+  tone/grounding checks.
 
 ## Architecture
 
@@ -127,7 +128,7 @@ uses to decide whether a snippet is evidence or a voice sample.
 | `scripts/parse_scripts.py` | Normalizes OT text + prequel CSVs into `data/processed/star_wars_dialogues.json`. |
 | `scripts/synthesize_dataset.py` | Builds the instruction-tuning JSONL from dialogue + lore. |
 | `tests/` | `pytest` suite for parsers, vector store, retriever, persona manager, and Gemini wrapper. |
-| `tests/persona_audit.py` | `PersonaAuditor` — end-to-end RAG cycle plus heuristic tone/grounding checks. |
+| `src/eval/persona_auditor.py` | `PersonaAuditor` — end-to-end RAG cycle plus heuristic tone/grounding checks. |
 | `data/raw/` | Source corpora: lore JSON, prequel CSVs, original-trilogy script text. |
 | `data/processed/` | Normalized dialogue JSON and the synthesized instruction dataset. |
 | `data/vector_store/` | Generated FAISS index (gitignored). |
