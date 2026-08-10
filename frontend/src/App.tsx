@@ -1,8 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Terminal, Send, Power, Users, ChevronRight, Zap } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Send, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+
+// --- Config ---
+// Set VITE_API_URL at build time to point the UI at a non-local backend; see
+// .env.example. Vite inlines it, so it must be a public value -- never a secret.
+// The trailing slash is stripped so `${API_BASE}/api/...` cannot produce a
+// double slash.
+const API_BASE = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000').replace(/\/+$/, '');
 
 // --- Utils ---
 function cn(...inputs: ClassValue[]) {
@@ -31,7 +38,7 @@ export default function App() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/personas')
+    fetch(`${API_BASE}/api/personas`)
       .then(res => res.json())
       .then(data => setPersonas(data))
       .catch(err => console.error("Error fetching personas:", err));
@@ -52,7 +59,7 @@ export default function App() {
     setIsTyping(true);
 
     try {
-      const response = await fetch('http://localhost:8000/api/chat', {
+      const response = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: input, persona: selectedPersona })
