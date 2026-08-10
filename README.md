@@ -268,9 +268,19 @@ Create a `.env` file in the repo root:
 GOOGLE_API_KEY=your-gemini-api-key
 ```
 
-`GOOGLE_API_KEY` is the only environment variable the application reads. Without it the API server fails at
-import time — `ChatGoogleGenerativeAI` validates the key in its constructor and `src/api/server.py`
-instantiates the wrapper at module scope.
+`GOOGLE_API_KEY` is the only required variable; without it the API server fails at startup, because
+`ChatGoogleGenerativeAI` validates the key in its constructor. The rest are optional:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `GOOGLE_API_KEY` | *(required)* | Gemini credential |
+| `HOLOCRON_ALLOWED_ORIGINS` | `http://localhost:5180,http://127.0.0.1:5180` | Comma-separated CORS origin allowlist |
+| `HOLOCRON_RATE_LIMIT_REQUESTS` | `20` | Chat requests per IP per window; `0` disables the limiter |
+| `HOLOCRON_RATE_LIMIT_WINDOW` | `60` | Rate-limit window, seconds |
+| `HOLOCRON_TRUST_INDEX` | unset | Load a vector index without verifying its manifest (see step 3) |
+
+The rate limiter is per-process, so with *N* uvicorn workers the effective limit is *N* times the configured
+one. It exists to stop one client draining the Gemini quota, not as a distributed quota system.
 
 > `scripts/scrape_wookieepedia.py` additionally needs `requests` and `beautifulsoup4`, which are **not** in
 > `requirements.txt`. Install them separately if you want to re-scrape:
