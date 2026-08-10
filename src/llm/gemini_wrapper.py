@@ -82,7 +82,7 @@ class GeminiChatWrapper:
         system_prompt: str,
         user_query: str,
         context: str
-    ) -> Generator[str, None, None]:
+    ) -> Generator[str]:
         """
         Streams the chat response.
         """

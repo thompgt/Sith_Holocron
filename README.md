@@ -116,7 +116,7 @@ uses to decide whether a snippet is evidence or a voice sample.
 | Path | Purpose |
 | --- | --- |
 | `src/main.py` | Interactive Rich CLI; also bootstraps the vector index if it does not exist. |
-| `src/api/server.py` | FastAPI app: `GET /api/personas`, SSE-streaming `POST /api/chat`, `GET /metrics`. Instantiates the RAG engine at import. |
+| `src/api/server.py` | FastAPI app: `GET /healthz`, `GET /api/personas`, SSE-streaming `POST /api/chat`, `GET /metrics`. Builds the RAG engine in the `lifespan` handler and refuses to start without an index. |
 | `src/ingestion/lore_processor.py` | Loads Wookieepedia JSON and chunks it into `Document`s with title/url metadata. |
 | `src/ingestion/script_parser.py` | Parses screenplay CSV and tab-separated dialogue files into per-line `Document`s tagged by character. |
 | `src/retrieval/vector_store.py` | `VectorStoreManager` — embeddings, FAISS index creation, similarity search, save/load. |
@@ -125,8 +125,9 @@ uses to decide whether a snippet is evidence or a voice sample.
 | `src/llm/gemini_wrapper.py` | Gemini chat wrapper with `chat()` and `stream_chat()`. |
 | `src/observability/metrics.py` | Prometheus metric families (`holocron_*`) and persona label normalization. |
 | `frontend/src/App.tsx` | React chat UI: persona sidebar, SSE stream reader, CRT/holocron styling. |
-| `frontend/src/index.css`, `frontend/tailwind.config.js` | Holocron theme and the custom `sith-*` palette (red, glow, obsidian, charcoal, steel). |
-| `scripts/scrape_wookieepedia.py` | Scrapes eight Fandom pages into `data/raw/wookieepedia_lore.json`. |
+| `frontend/src/index.css` | Holocron theme and the custom `sith-*` palette (red, glow, obsidian, charcoal, steel), in a Tailwind v4 `@theme` block. |
+| `scripts/fetch_corpora.py` | Clones the two third-party screenplay corpora into `data/raw/`. Run this first; they are not vendored. |
+| `scripts/scrape_wookieepedia.py` | Scrapes eight Fandom pages into `data/raw/lore.json`. Refuses to overwrite the corpus if every page fails. |
 | `scripts/parse_scripts.py` | Normalizes OT text + prequel CSVs into `data/processed/star_wars_dialogues.json`. |
 | `scripts/synthesize_dataset.py` | Builds the instruction-tuning JSONL from dialogue + lore. |
 | `tests/` | `pytest` suite for parsers, vector store, retriever, persona manager, and Gemini wrapper. |
@@ -134,7 +135,9 @@ uses to decide whether a snippet is evidence or a voice sample.
 | `data/raw/` | Source corpora: lore JSON, prequel CSVs, original-trilogy script text. |
 | `data/processed/` | Normalized dialogue JSON and the synthesized instruction dataset. |
 | `data/vector_store/` | Generated FAISS index (gitignored). |
-| `monitoring/` | Docker Compose Prometheus + Grafana stack with file-based provisioning. |
+| `monitoring/` | Docker Compose Prometheus + Grafana stack with file-based provisioning, including the committed dashboard. |
+| `.github/workflows/ci.yml` | CI: `ruff` + `pytest`, and `tsc -b` + `vite build`. |
+| `ruff.toml` | Lint config, committed so local and CI runs agree. |
 | `PROTOCOL.md` | Engineering and validation protocol (red-green-refactor, commit gatekeeping, RAG QC). |
 | `WORKPLAN.md` | Phased task breakdown, Phases 1–6. |
 
@@ -350,14 +353,22 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:5180>. The frontend hardcodes `http://localhost:8000` as the API origin
-(`frontend/src/App.tsx`), so keep the backend on port 8000. The Vite dev port (5180) is set in
-`frontend/vite.config.ts`.
+Open <http://localhost:5180>. The Vite dev port (5180) is set in `frontend/vite.config.ts`.
 
-> **Known issue:** `frontend/package.json` pins `tailwindcss@^4`, but the styles use Tailwind v3 syntax
-> (`@tailwind base;` in `src/index.css`, `tailwind.config.js`, and `tailwindcss` as a direct PostCSS plugin).
-> A fresh `npm install && npm run dev` therefore fails with *"trying to use `tailwindcss` directly as a
-> PostCSS plugin"*. Until the pin is corrected, run `npm install tailwindcss@3.4.17` in `frontend/`.
+The API origin defaults to `http://localhost:8000`. To point the UI somewhere else, copy
+`frontend/.env.example` to `frontend/.env.local` and set `VITE_API_URL`:
+
+```
+VITE_API_URL=https://holocron.example.com
+```
+
+Vite inlines `VITE_*` variables into the built bundle, so that value is public — never put a secret there.
+Whatever origin the UI is *served from* must also appear in the backend's `HOLOCRON_ALLOWED_ORIGINS`, or the
+browser blocks the request before it reaches FastAPI.
+
+Styling is Tailwind v4, configured the v4 way: `@import "tailwindcss"` and an `@theme` block in
+`frontend/src/index.css` carry the `sith-*` palette. There is no `tailwind.config.js` — v4 does not read one
+unless an explicit `@config` points at it.
 
 ### 5. Run the monitoring stack (optional)
 
@@ -438,7 +449,7 @@ prompt and to the `other` label in metrics.
 **Regenerate the corpora** (only needed to rebuild raw data):
 
 ```bash
-python scripts/scrape_wookieepedia.py   # scrape Fandom lore pages -> data/raw/wookieepedia_lore.json
+python scripts/scrape_wookieepedia.py   # scrape Fandom lore pages -> data/raw/lore.json
 python scripts/parse_scripts.py         # normalize film scripts -> data/processed/star_wars_dialogues.json
 python scripts/synthesize_dataset.py    # build an instruction-tuning JSONL from the dialogue set
 ```
