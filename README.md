@@ -282,9 +282,8 @@ GOOGLE_API_KEY=your-gemini-api-key
 The rate limiter is per-process, so with *N* uvicorn workers the effective limit is *N* times the configured
 one. It exists to stop one client draining the Gemini quota, not as a distributed quota system.
 
-> `scripts/scrape_wookieepedia.py` additionally needs `requests` and `beautifulsoup4`, which are **not** in
-> `requirements.txt`. Install them separately if you want to re-scrape:
-> `pip install requests beautifulsoup4`.
+`requirements.txt` is fully pinned, including `requests` and `beautifulsoup4` for
+`scripts/scrape_wookieepedia.py`, so `pip install -r requirements.txt` is the whole backend install.
 
 ### 2. Fetch the screenplay corpora
 

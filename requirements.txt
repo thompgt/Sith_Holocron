@@ -1,17 +1,52 @@
-langchain
-langchain-community
-langchain-openai
-faiss-cpu
-langchain-google-genai
-langchain-huggingface
-sentence-transformers
-pytest
-pandas
-python-dotenv
-tqdm
-rich
-fastapi
-uvicorn
-sse-starlette
-prometheus-client
-prometheus-fastapi-instrumentator
+# Pinned to the versions this project is actually known to work on. The file was
+# previously a bare list of package names, which meant every fresh install
+# resolved to whatever was newest that day -- and this stack (langchain 1.x,
+# pydantic 2.x, sentence-transformers 5.x) breaks across majors, so "it worked
+# last month" told you nothing about today.
+#
+# To move a pin: bump it here, reinstall, run `pytest`, and commit the pin with
+# the test run that justifies it.
+
+# --- retrieval -----------------------------------------------------------
+langchain-community==0.4.2         # FAISS vector store wrapper
+langchain-core==1.4.2              # Document, and the interfaces the rest implement
+langchain-text-splitters==1.1.2    # RecursiveCharacterTextSplitter
+langchain-huggingface==1.2.2       # HuggingFaceEmbeddings
+sentence-transformers==5.5.1       # all-MiniLM-L6-v2 runs through this
+faiss-cpu==1.14.2
+
+# --- generation ----------------------------------------------------------
+langchain-google-genai==4.2.4      # gemini-1.5-flash
+
+# --- API -----------------------------------------------------------------
+fastapi==0.136.3
+uvicorn==0.49.0
+pydantic==2.13.4                   # imported directly by src/api/server.py
+
+# --- observability -------------------------------------------------------
+prometheus-client==0.26.0
+prometheus-fastapi-instrumentator==8.1.0
+
+# --- corpus preparation --------------------------------------------------
+# requests and beautifulsoup4 are imported by scripts/scrape_wookieepedia.py.
+# beautifulsoup4 was missing entirely, so that script raised ModuleNotFoundError
+# on a clean install; requests only happened to be present as a transitive
+# dependency of langchain-community, which is not something to rely on.
+requests==2.34.2
+beautifulsoup4==4.15.0
+pandas==3.0.3                      # reads the prequel dialogue CSVs
+
+# --- runtime odds and ends -----------------------------------------------
+python-dotenv==1.2.2
+rich==15.0.0
+
+# --- tests ---------------------------------------------------------------
+pytest==9.0.3
+httpx==0.28.1                      # TestClient, and ASGITransport in the API tests
+
+# Deliberately absent, having been declared but never imported:
+#   langchain          - only the langchain-* split packages are used
+#   langchain-openai   - a whole second provider SDK; generation is Gemini-only
+#   sse-starlette      - the SSE frames in src/api/server.py are hand-rolled on
+#                        StreamingResponse
+#   tqdm               - arrives via sentence-transformers if anything wants it
