@@ -309,6 +309,23 @@ You will see `Holocron energy low. Initializing data core...` while it embeds, t
 once `data/vector_store/sith_holocron_index.faiss` is written. Run this once before starting the web backend,
 which only loads an existing index.
 
+**The index is trusted code, not data.** FAISS stores its docstore as a pickle, so loading an index executes
+whatever is in that file — at import time, before a single request is served. Because `data/vector_store/` is
+gitignored, every index is built or obtained out-of-band, which is exactly the situation where a swapped `.pkl`
+goes unnoticed. So `save()` also writes `sith_holocron_index.manifest.json` recording a SHA-256 of both files,
+and `load()` re-verifies them before unpickling:
+
+| Situation | Behaviour |
+| --- | --- |
+| No index on disk | `load()` returns `False` |
+| Digests match the manifest | Loads |
+| Manifest missing, unreadable, or digests differ | Raises `IndexTrustError` |
+| `HOLOCRON_TRUST_INDEX=1` | Skips verification, prints a warning, loads anyway |
+
+An index built before this check existed has no manifest and will be refused — rebuild it with
+`python -m src.main`. Use `HOLOCRON_TRUST_INDEX=1` only for an index you deliberately took from elsewhere and
+have decided to trust.
+
 ### 4. Run the web app
 
 ```bash
