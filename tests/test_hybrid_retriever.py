@@ -1,6 +1,8 @@
 import pytest
 from langchain_core.documents import Document
+
 from src.retrieval.hybrid_retriever import HybridRetriever
+
 
 class MockVectorStore:
     def search(self, query, k=4):
@@ -19,7 +21,7 @@ def test_hybrid_retrieval_balance(hybrid_retriever):
     # Test that it fetches results
     results = hybrid_retriever.retrieve("Sith history", k=2)
     assert len(results) == 2
-    
+
     # Check if we have both types (or at least the structure is respected)
     types = [doc.metadata.get("type") for doc in results]
     assert "lore" in types or "dialogue" in types

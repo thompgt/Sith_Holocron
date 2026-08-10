@@ -1,9 +1,10 @@
 import os
 import time
-from typing import List, Optional, Generator
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage, SystemMessage, BaseMessage
+from collections.abc import Generator
+
 from dotenv import load_dotenv
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from src.observability import metrics
 
@@ -11,8 +12,8 @@ load_dotenv()
 
 class GeminiChatWrapper:
     def __init__(
-        self, 
-        api_key: Optional[str] = None, 
+        self,
+        api_key: str | None = None,
         model_name: str = "gemini-1.5-flash",
         temperature: float = 0.7
     ):
@@ -25,11 +26,11 @@ class GeminiChatWrapper:
         )
 
     def _prepare_messages(
-        self, 
-        system_prompt: str, 
-        user_query: str, 
+        self,
+        system_prompt: str,
+        user_query: str,
         context: str
-    ) -> List[BaseMessage]:
+    ) -> list[BaseMessage]:
         """
         Prepares the message list for the Gemini model.
         """
@@ -40,9 +41,9 @@ class GeminiChatWrapper:
         return messages
 
     def chat(
-        self, 
-        system_prompt: str, 
-        user_query: str, 
+        self,
+        system_prompt: str,
+        user_query: str,
         context: str
     ) -> str:
         """
@@ -77,9 +78,9 @@ class GeminiChatWrapper:
         return response.content
 
     def stream_chat(
-        self, 
-        system_prompt: str, 
-        user_query: str, 
+        self,
+        system_prompt: str,
+        user_query: str,
         context: str
     ) -> Generator[str, None, None]:
         """

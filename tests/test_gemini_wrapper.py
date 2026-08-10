@@ -1,6 +1,8 @@
 import pytest
-from src.llm.gemini_wrapper import GeminiChatWrapper
 from langchain_core.messages import HumanMessage, SystemMessage
+
+from src.llm.gemini_wrapper import GeminiChatWrapper
+
 
 @pytest.fixture
 def gemini_wrapper():
@@ -14,9 +16,9 @@ def test_prompt_formatting(gemini_wrapper):
     system_prompt = "You are Vader."
     user_query = "Who are you?"
     context = "Context info."
-    
+
     messages = gemini_wrapper._prepare_messages(system_prompt, user_query, context)
-    
+
     assert len(messages) == 2
     assert isinstance(messages[0], SystemMessage)
     assert isinstance(messages[1], HumanMessage)

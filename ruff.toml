@@ -1,0 +1,42 @@
+# Explicit config so `ruff check` means the same thing locally and in CI. Without
+# a config in the repo, ruff walks up the filesystem and can pick up whatever
+# pyproject.toml happens to sit above the checkout -- which is how a clean local
+# run and a failing CI run coexist.
+
+# Matches the Python the README asks for and CI runs.
+target-version = "py313"
+line-length = 100
+
+exclude = [
+    "venv",
+    "data",
+    "frontend",
+    ".github",
+]
+
+[lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes -- unused imports and names, undefined names
+    "W",    # pycodestyle warnings, incl. W605 invalid escape sequences
+    "I",    # import sorting
+    "UP",   # pyupgrade -- typing.List -> list, Optional[X] -> X | None
+    "B",    # bugbear -- mutable defaults, loop variable capture
+    "SIM",  # obvious simplifications
+    "PLW",  # pylint warnings
+]
+
+ignore = [
+    # Long lines are reformatted by hand here rather than by a formatter, and the
+    # explanatory comments this codebase leans on read worse when hard-wrapped at
+    # an arbitrary column. E501 is left to review.
+    "E501",
+]
+
+[lint.per-file-ignores]
+# Tests deliberately construct objects for their side effects and shadow names
+# across parametrised cases.
+"tests/*" = ["B011"]
+
+[lint.isort]
+known-first-party = ["src", "scripts"]

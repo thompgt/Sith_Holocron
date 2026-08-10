@@ -1,8 +1,10 @@
 import time
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
+
 from langchain_core.documents import Document
-from src.retrieval.vector_store import VectorStoreManager
+
 from src.observability import metrics
+from src.retrieval.vector_store import VectorStoreManager
 
 if TYPE_CHECKING:
     from src.llm.persona_manager import PersonaManager
@@ -26,10 +28,10 @@ class HybridRetriever:
     def retrieve(
         self,
         query: str,
-        character: Optional[str] = None,
+        character: str | None = None,
         k: int = 4,
         lore_weight: float = 0.5
-    ) -> List[Document]:
+    ) -> list[Document]:
         """
         Retrieves documents and attempts to balance Lore vs. Dialogue.
         If a character is provided, it filters dialogue for that character.

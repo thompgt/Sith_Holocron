@@ -21,7 +21,6 @@ first, which collapses anything unrecognised to ``other``. That caps the label
 space at four values no matter what is POSTed.
 """
 
-from typing import Optional
 
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
@@ -35,7 +34,7 @@ KNOWN_PERSONAS = ("VADER", "PALPATINE", "GENERIC_SITH")
 UNKNOWN_PERSONA = "other"
 
 
-def normalize_persona(persona: Optional[str]) -> str:
+def normalize_persona(persona: str | None) -> str:
     """
     Collapse a caller-supplied persona to a bounded label value.
 

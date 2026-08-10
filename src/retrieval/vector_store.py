@@ -1,10 +1,10 @@
 import hashlib
 import json
 import os
-from typing import List, Optional
+
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.documents import Document
+from langchain_huggingface import HuggingFaceEmbeddings
 
 # Loading a FAISS index means unpickling its docstore, and unpickling is
 # arbitrary code execution. The threat is not hypothetical for this project: the
@@ -38,7 +38,7 @@ def _trust_override_enabled() -> bool:
 
 class VectorStoreManager:
     def __init__(
-        self, 
+        self,
         model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
         persist_directory: str = "data/vector_store",
         index_name: str = "sith_holocron_index"
@@ -46,9 +46,9 @@ class VectorStoreManager:
         self.embeddings = HuggingFaceEmbeddings(model_name=model_name)
         self.persist_directory = persist_directory
         self.index_name = index_name
-        self.vector_store: Optional[FAISS] = None
+        self.vector_store: FAISS | None = None
 
-    def add_documents(self, documents: List[Document]):
+    def add_documents(self, documents: list[Document]):
         """
         Adds documents to the vector store. Creates a new index if one doesn't exist.
         """
@@ -57,15 +57,14 @@ class VectorStoreManager:
         else:
             self.vector_store.add_documents(documents)
 
-    def search(self, query: str, k: int = 4) -> List[Document]:
+    def search(self, query: str, k: int = 4) -> list[Document]:
         """
         Performs a similarity search in the vector store.
         """
-        if self.vector_store is None:
-            # Try to load if not initialized
-            if not self.load():
-                return []
-        
+        # Lazily load on first search if the caller never called load() itself.
+        if self.vector_store is None and not self.load():
+            return []
+
         return self.vector_store.similarity_search(query, k=k)
 
     # --- on-disk layout -------------------------------------------------
@@ -108,7 +107,7 @@ class VectorStoreManager:
             )
 
         try:
-            with open(self.manifest_path, "r", encoding="utf-8") as handle:
+            with open(self.manifest_path, encoding="utf-8") as handle:
                 manifest = json.load(handle)
             expected = manifest["files"]
         except (json.JSONDecodeError, KeyError, OSError) as exc:

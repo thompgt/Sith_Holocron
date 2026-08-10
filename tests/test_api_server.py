@@ -21,7 +21,6 @@ import src.api.server as server
 from src.llm.persona_manager import PersonaManager
 from src.observability import metrics
 
-
 # --- stubs --------------------------------------------------------------
 
 
@@ -295,9 +294,8 @@ def test_retrieval_failure_is_a_real_500(client_factory):
         error_type="RuntimeError",
     )
 
-    with client:
-        with pytest.raises(RuntimeError, match="index exploded"):
-            client.post("/api/chat", json={"message": "hi"})
+    with client, pytest.raises(RuntimeError, match="index exploded"):
+        client.post("/api/chat", json={"message": "hi"})
 
     assert counter_value(
         metrics.CHAT_ERRORS,

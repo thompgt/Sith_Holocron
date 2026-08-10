@@ -1,5 +1,5 @@
-from typing import List, Dict, Optional
 from langchain_core.documents import Document
+
 
 class PersonaManager:
     def __init__(self):
@@ -37,7 +37,7 @@ class PersonaManager:
             }
         }
 
-    def aliases(self, character: Optional[str]) -> Optional[set]:
+    def aliases(self, character: str | None) -> set | None:
         """Speaker names in the corpora that count as this persona.
 
         Returns None when no filter should be applied (no character given, or a
@@ -57,8 +57,8 @@ class PersonaManager:
         """
         char_key = character.upper()
         persona = self.personas.get(char_key, self.personas["GENERIC_SITH"])
-        
-        prompt = f"""You are {persona['name']}. 
+
+        prompt = f"""You are {persona['name']}.
 {persona['description']}
 
 YOUR MISSION:
@@ -73,24 +73,24 @@ CONSTRAINTS:
 """
         return prompt
 
-    def format_context(self, docs: List[Document]) -> str:
+    def format_context(self, docs: list[Document]) -> str:
         """
         Formats retrieved documents into a structured context string for the LLM.
         """
         lore_snippets = []
         dialogue_snippets = []
-        
+
         for doc in docs:
             if doc.metadata.get("type") == "dialogue":
                 dialogue_snippets.append(f"- \"{doc.page_content}\"")
             else:
                 title = doc.metadata.get("title", "Lore")
                 lore_snippets.append(f"Source [{title}]: {doc.page_content}")
-        
+
         context_str = "--- LORE CONTEXT ---\n"
         context_str += "\n".join(lore_snippets) if lore_snippets else "No relevant lore found."
-        
+
         context_str += "\n\n--- PAST UTTERANCES (FOR STYLISTIC REFERENCE) ---\n"
         context_str += "\n".join(dialogue_snippets) if dialogue_snippets else "No stylistic matches found."
-        
+
         return context_str

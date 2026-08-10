@@ -89,11 +89,8 @@ def _on_rm_error(func, path, exc_info):
     to delete a read-only file, so a plain rmtree over a cloned corpus fails with
     WinError 5.
     """
-    try:
-        os.chmod(path, stat.S_IWRITE)
-        func(path)
-    except OSError:
-        raise
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
 
 
 def rmtree(path: Path) -> None:
@@ -128,7 +125,9 @@ def clone(corpus: Corpus, force: bool) -> bool:
         )
 
     for cmd in steps:
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        # check=False: the return code is inspected below so a failed clone can
+        # report git's own stderr rather than a bare CalledProcessError.
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
         if result.returncode != 0:
             print(f"  {corpus.name}: FAILED\n{result.stderr.strip()}", file=sys.stderr)
             return False

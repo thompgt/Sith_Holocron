@@ -1,24 +1,22 @@
+import json
 import os
+import threading
 import time
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
-from typing import Optional
-import json
-import threading
+from dataclasses import dataclass
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel, Field
 from starlette.concurrency import iterate_in_threadpool
 
-from prometheus_fastapi_instrumentator import Instrumentator
-
-from src.retrieval.vector_store import VectorStoreManager
-from src.retrieval.hybrid_retriever import HybridRetriever
 from src.llm.gemini_wrapper import GeminiChatWrapper
 from src.llm.persona_manager import PersonaManager
 from src.observability import metrics
+from src.retrieval.hybrid_retriever import HybridRetriever
+from src.retrieval.vector_store import VectorStoreManager
 
 # --- configuration ------------------------------------------------------
 
@@ -58,7 +56,7 @@ class RateLimiter:
         self._lock = threading.Lock()
         self._windows: dict[str, tuple[float, int]] = {}
 
-    def check(self, key: str, now: Optional[float] = None) -> bool:
+    def check(self, key: str, now: float | None = None) -> bool:
         """Record a request. Returns False when the caller is over its limit."""
         if self.limit <= 0:
             return True
@@ -100,7 +98,7 @@ class Engine:
 
 #: Populated by the lifespan handler. None until startup succeeds, which is what
 #: /healthz reports on.
-engine: Optional[Engine] = None
+engine: Engine | None = None
 
 
 def build_engine() -> Engine:
@@ -140,7 +138,10 @@ def require_engine() -> Engine:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global engine
+    # A module-level singleton assigned from the lifespan handler is the shape
+    # FastAPI's startup hook has; the alternative (app.state) is the same global
+    # with extra indirection. require_engine() is the only reader.
+    global engine  # noqa: PLW0603
     engine = build_engine()
 
     # Startup facts. Recorded once so /metrics answers "is the index even

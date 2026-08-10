@@ -1,7 +1,8 @@
+
 import pytest
-import os
-import pandas as pd
+
 from src.ingestion.script_parser import ScriptParser
+
 
 @pytest.fixture
 def sample_csv_script(tmp_path):
@@ -22,7 +23,7 @@ def sample_txt_script(tmp_path):
 def test_parse_csv_script(sample_csv_script):
     parser = ScriptParser()
     docs = parser.parse_csv(sample_csv_script, sep=";", char_col="from", text_col="text")
-    
+
     assert len(docs) == 1
     assert docs[0].metadata["character"] == "QUI-GON"
     assert docs[0].page_content == "Captain."
@@ -30,7 +31,7 @@ def test_parse_csv_script(sample_csv_script):
 def test_parse_txt_tab_script(sample_txt_script):
     parser = ScriptParser()
     docs = parser.parse_tab_txt(sample_txt_script)
-    
+
     assert len(docs) == 2
     assert docs[0].metadata["character"] == "THREEPIO"
     assert "Did you hear that?" in docs[0].page_content

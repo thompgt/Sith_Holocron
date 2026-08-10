@@ -1,6 +1,8 @@
 import pytest
-from src.llm.persona_manager import PersonaManager
 from langchain_core.documents import Document
+
+from src.llm.persona_manager import PersonaManager
+
 
 @pytest.fixture
 def persona_manager():
@@ -17,7 +19,7 @@ def test_format_context_injection(persona_manager):
         Document(page_content="I find your lack of faith disturbing.", metadata={"type": "dialogue", "character": "VADER"})
     ]
     formatted = persona_manager.format_context(docs)
-    
+
     assert "LORE CONTEXT" in formatted
     assert "The Rule of Two" in formatted
     assert "PAST UTTERANCES" in formatted
