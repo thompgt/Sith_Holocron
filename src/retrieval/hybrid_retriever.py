@@ -1,12 +1,27 @@
 import time
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 from langchain_core.documents import Document
 from src.retrieval.vector_store import VectorStoreManager
 from src.observability import metrics
 
+if TYPE_CHECKING:
+    from src.llm.persona_manager import PersonaManager
+
 class HybridRetriever:
-    def __init__(self, vector_store_manager: VectorStoreManager):
+    def __init__(
+        self,
+        vector_store_manager: VectorStoreManager,
+        persona_manager: Optional["PersonaManager"] = None,
+    ):
         self.vs_manager = vector_store_manager
+        # Used only to resolve a persona key to the speaker names it answers to
+        # in the corpora. Constructed here when not supplied so a bare
+        # HybridRetriever(vs) still filters correctly.
+        if persona_manager is None:
+            from src.llm.persona_manager import PersonaManager
+
+            persona_manager = PersonaManager()
+        self.pm = persona_manager
 
     def retrieve(
         self,
@@ -21,6 +36,7 @@ class HybridRetriever:
         """
         persona_label = metrics.normalize_persona(character)
         started = time.perf_counter()
+        allowed_speakers = self.pm.aliases(character)
 
         try:
             # 1. Fetch more than k to allow for filtering and re-ranking
@@ -34,9 +50,13 @@ class HybridRetriever:
                 doc_type = doc.metadata.get("type", "lore")
 
                 if doc_type == "dialogue":
-                    # If character filter is active, only keep matching character
-                    if character:
-                        if doc.metadata.get("character", "").upper() == character.upper():
+                    # If a character filter is active, keep only lines spoken by
+                    # a name this persona answers to. Membership, not equality:
+                    # the corpora credit Palpatine as DARTH SIDIOUS / EMPEROR,
+                    # never as the persona key.
+                    if allowed_speakers is not None:
+                        speaker = (doc.metadata.get("character") or "").upper().strip()
+                        if speaker in allowed_speakers:
                             dialogue_docs.append(doc)
                     else:
                         dialogue_docs.append(doc)
@@ -50,12 +70,20 @@ class HybridRetriever:
 
             final_docs = lore_docs[:target_lore] + dialogue_docs[:target_dialogue]
 
-            # If we don't have enough of one, fill with the other
+            # If we don't have enough of one, fill from whatever is left over.
+            # Written as two sequential ifs rather than if/elif. Today the elif
+            # was equivalent -- the two targets sum to exactly k, so a shortfall
+            # implies the pool that fell short has no surplus, and at most one
+            # branch can ever contribute. That equivalence is a property of the
+            # target arithmetic, not of the backfill, and it silently stops
+            # holding the moment the targets are computed any other way.
             if len(final_docs) < k:
                 remaining = k - len(final_docs)
-                if len(lore_docs) > target_lore:
-                    final_docs.extend(lore_docs[target_lore:target_lore + remaining])
-                elif len(dialogue_docs) > target_dialogue:
+                if remaining > 0 and len(lore_docs) > target_lore:
+                    extra = lore_docs[target_lore:target_lore + remaining]
+                    final_docs.extend(extra)
+                    remaining -= len(extra)
+                if remaining > 0 and len(dialogue_docs) > target_dialogue:
                     final_docs.extend(dialogue_docs[target_dialogue:target_dialogue + remaining])
 
             result = final_docs[:k]

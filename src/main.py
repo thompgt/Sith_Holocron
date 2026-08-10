@@ -32,7 +32,7 @@ class SithHolocronCLI:
         # Initialize Retriever
         if not self.vs_manager.load():
             self._bootstrap_data()
-        self.retriever = HybridRetriever(self.vs_manager)
+        self.retriever = HybridRetriever(self.vs_manager, persona_manager=self.pm)
 
     def _bootstrap_data(self):
         console.print("[bold yellow]Holocron energy low. Initializing data core...[/bold yellow]")

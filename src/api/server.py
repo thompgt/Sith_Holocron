@@ -36,7 +36,7 @@ app.add_middleware(
 pm = PersonaManager()
 vs_manager = VectorStoreManager(persist_directory="data/vector_store")
 vs_manager.load()
-retriever = HybridRetriever(vs_manager)
+retriever = HybridRetriever(vs_manager, persona_manager=pm)
 llm = GeminiChatWrapper()
 
 # Startup facts. Recorded once at import so /metrics answers "is the index even
