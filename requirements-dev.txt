@@ -1,0 +1,5 @@
+# Tooling that CI runs but the application does not import. Kept out of
+# requirements.txt so a deployment does not pull a linter.
+-r requirements.txt
+
+ruff==0.16.2

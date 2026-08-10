@@ -10,6 +10,8 @@
 ![React](https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black)
 ![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=for-the-badge&logo=prometheus&logoColor=white)
 
+[![CI](https://github.com/thompgt/Sith_Holocron/actions/workflows/ci.yml/badge.svg)](https://github.com/thompgt/Sith_Holocron/actions/workflows/ci.yml)
+
 ![Sith Holocron landing state — persona sidebar and idle holocron core](docs/images/holocron-landing.png)
 
 *Landing state. The persona list in the sidebar is fetched live from the FastAPI backend at
@@ -392,8 +394,25 @@ rather than an error — indistinguishable from "no traffic yet".
 ### 6. Run the tests
 
 ```bash
-pytest
+pytest                       # the suite
+pip install -r requirements-dev.txt && ruff check .   # the linter CI runs
 ```
+
+The first `pytest` run downloads `all-MiniLM-L6-v2` (~90 MB) and takes a few minutes; later runs are quick.
+
+`.github/workflows/ci.yml` runs both halves on every push and pull request:
+
+| Job | Steps |
+| --- | --- |
+| `backend` | `ruff check .`, then `pytest` on Python 3.13 |
+| `frontend` | `npm ci`, `npx tsc -b`, `npx vite build` |
+
+No Gemini key is needed — the wrapper tests pass an explicit mock key and the API tests use a stub LLM — but
+`ChatGoogleGenerativeAI` insists on *some* key at construction, so CI supplies an obviously fake one.
+
+`ruff.toml` is committed deliberately: without a config in the repo, ruff walks up the filesystem and can pick
+up whatever `pyproject.toml` sits above the checkout, which is how a clean local run and a failing CI run
+manage to coexist.
 
 ### Other commands
 
