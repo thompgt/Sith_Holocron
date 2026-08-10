@@ -370,9 +370,24 @@ docker compose up -d
 
 The backend runs on the host, not in Compose — Prometheus scrapes it via `host.docker.internal:8000`. If you
 move the backend, edit `monitoring/prometheus/prometheus.yml` and reload without restarting:
-`curl -X POST http://localhost:9094/-/reload`. Grafana's datasource is provisioned automatically; the
-dashboard provider watches `monitoring/grafana/dashboards/`, which currently holds no committed dashboard
-JSON, so build panels in the UI or drop a JSON file there.
+`curl -X POST http://localhost:9094/-/reload`. Grafana's datasource is provisioned automatically.
+
+The **Sith Holocron — RAG backend** dashboard is committed at
+`monitoring/grafana/dashboards/holocron.json` and loads into the *Sith Holocron* folder at startup. Five rows,
+top to bottom: startup facts (is an index even loaded), the chat endpoint, retrieval, Gemini, and raw HTTP.
+The provider re-reads the directory every 30s, so edits to the JSON appear without a container restart.
+
+Two panels are worth knowing about before you need them:
+
+- **Chat requests by outcome** is the only place a chat failure is visible. `event_generator()` catches every
+  exception and emits it as an SSE error frame with HTTP 200 already on the wire, so a total Gemini outage
+  looks like perfectly healthy traffic in the HTTP row.
+- **Documents returned per call** should sit at `k` (4). A mean below that means the index is thin or the
+  persona filter discarded every dialogue hit — answers are less grounded than they appear.
+
+`tests/test_dashboard.py` asserts that every panel queries a metric that actually exists and that every
+`holocron_*` family is plotted somewhere, because a panel pointed at a renamed metric renders an empty graph
+rather than an error — indistinguishable from "no traffic yet".
 
 ### 6. Run the tests
 
