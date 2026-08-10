@@ -38,27 +38,59 @@ class SithHolocronCLI:
         console.print("[bold yellow]Holocron energy low. Initializing data core...[/bold yellow]")
         lore_proc = LoreProcessor()
         script_parser = ScriptParser()
-        
+
         docs = []
+        missing = []
+
         # Ingest Lore
-        if os.path.exists("data/raw/lore.json"):
-            docs.extend(lore_proc.process_file("data/raw/lore.json"))
-        
-        # Ingest Scripts
+        lore_file = "data/raw/lore.json"
+        if os.path.exists(lore_file):
+            docs.extend(lore_proc.process_file(lore_file))
+        else:
+            missing.append(lore_file)
+
+        # Ingest Scripts. These live in third-party corpora fetched by
+        # scripts/fetch_corpora.py -- absent them the index is lore-only and the
+        # retriever's dialogue half is silently empty, so say so loudly.
         ot_script = "data/raw/star-wars-scripts/Text_files/EpisodeIV_dialogues.txt"
         if os.path.exists(ot_script):
             docs.extend(script_parser.parse_tab_txt(ot_script))
-            
+        else:
+            missing.append(ot_script)
+
         prequel_script = "data/raw/prequel-csv/star_wars_1_data.csv"
         if os.path.exists(prequel_script):
             docs.extend(script_parser.parse_csv(prequel_script, sep=";", char_col="from", text_col="text"))
-
-        if docs:
-            self.vs_manager.add_documents(docs)
-            self.vs_manager.save()
-            console.print("[bold green]Data core stabilized.[/bold green]")
         else:
-            console.print("[bold red]WARNING:[/bold red] No raw data found to index.")
+            missing.append(prequel_script)
+
+        dialogue_count = sum(1 for d in docs if d.metadata.get("type") == "dialogue")
+
+        if missing:
+            console.print("[bold yellow]Missing corpora:[/bold yellow]")
+            for path in missing:
+                console.print(f"  - {path}")
+            console.print(
+                "[bold yellow]Run [white]python scripts/fetch_corpora.py[/white] "
+                "to fetch the screenplay corpora.[/bold yellow]"
+            )
+
+        if not docs:
+            console.print("[bold red]ERROR:[/bold red] No raw data found to index. Cannot continue.")
+            sys.exit(1)
+
+        if dialogue_count == 0:
+            console.print(
+                "[bold red]WARNING:[/bold red] Indexing lore only -- no dialogue documents. "
+                "Persona voice matching will find nothing."
+            )
+
+        self.vs_manager.add_documents(docs)
+        self.vs_manager.save()
+        console.print(
+            f"[bold green]Data core stabilized.[/bold green] "
+            f"{len(docs)} documents ({dialogue_count} dialogue)."
+        )
 
     def run(self):
         self.display_welcome()

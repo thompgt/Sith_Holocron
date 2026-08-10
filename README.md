@@ -276,7 +276,28 @@ instantiates the wrapper at module scope.
 > `requirements.txt`. Install them separately if you want to re-scrape:
 > `pip install requests beautifulsoup4`.
 
-### 2. Build the index
+### 2. Fetch the screenplay corpora
+
+The dialogue half of the retriever comes from two public repositories that are **not** vendored here:
+
+```bash
+python scripts/fetch_corpora.py
+```
+
+| Corpus | Upstream | Used at runtime |
+| --- | --- | --- |
+| `data/raw/star-wars-scripts/` | [gastonstat/StarWars](https://github.com/gastonstat/StarWars) | **Yes** — `src/main.py` reads `Text_files/EpisodeIV_dialogues.txt` |
+| `data/raw/prequel-scripts/` | [jcwieme/data-scripts-star-wars](https://github.com/jcwieme/data-scripts-star-wars) | No — provenance of the vendored `data/raw/prequel-csv/` |
+
+Both directories are gitignored. Skipping this step is not fatal but it is silent in the worst way: the index
+builds lore-only, every persona's `PAST UTTERANCES` block is empty, and answers lose their voice with no
+error. `src/main.py` now names the missing files and points back at this script rather than skipping quietly.
+
+The script is idempotent; pass `--force` to re-clone. Only `5. Data CSV/` is checked out from the prequel
+repo, because a full checkout fails on Windows — that repo carries a macOS resource file named `Icon\r`, and
+`?`/control characters are not legal in Windows filenames.
+
+### 3. Build the index
 
 `data/vector_store/` is gitignored. The CLI builds it on first launch from whatever raw data is present:
 
@@ -288,7 +309,7 @@ You will see `Holocron energy low. Initializing data core...` while it embeds, t
 once `data/vector_store/sith_holocron_index.faiss` is written. Run this once before starting the web backend,
 which only loads an existing index.
 
-### 3. Run the web app
+### 4. Run the web app
 
 ```bash
 # terminal 1 — API on :8000
@@ -309,7 +330,7 @@ Open <http://localhost:5180>. The frontend hardcodes `http://localhost:8000` as 
 > A fresh `npm install && npm run dev` therefore fails with *"trying to use `tailwindcss` directly as a
 > PostCSS plugin"*. Until the pin is corrected, run `npm install tailwindcss@3.4.17` in `frontend/`.
 
-### 4. Run the monitoring stack (optional)
+### 5. Run the monitoring stack (optional)
 
 ```bash
 cd monitoring
@@ -326,7 +347,7 @@ move the backend, edit `monitoring/prometheus/prometheus.yml` and reload without
 dashboard provider watches `monitoring/grafana/dashboards/`, which currently holds no committed dashboard
 JSON, so build panels in the UI or drop a JSON file there.
 
-### 5. Run the tests
+### 6. Run the tests
 
 ```bash
 pytest

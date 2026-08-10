@@ -22,6 +22,12 @@ node_modules/
 dist/
 build/
 
+# Third-party corpora, fetched by scripts/fetch_corpora.py rather than vendored.
+# These were previously committed as bare gitlinks with no .gitmodules, so a
+# fresh clone got empty directories and the index silently built lore-only.
+data/raw/star-wars-scripts/
+data/raw/prequel-scripts/
+
 # Generated vector stores
 data/vector_store/
 data/test_vector_db/
