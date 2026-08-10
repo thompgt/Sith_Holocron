@@ -1,6 +1,30 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/* Tailwind v4 is configured in CSS, not in tailwind.config.js -- v4 does not
+   load that file unless an explicit @config points at it. The palette below is
+   the former theme.extend.colors.sith block; `--color-sith-red` is what makes
+   `bg-sith-red` / `text-sith-red` / `border-sith-red` resolve. */
+@theme {
+  --color-sith-red: #E50914;
+  --color-sith-glow: rgba(229, 9, 20, 0.6);
+  --color-sith-obsidian: #0B0C10;
+  --color-sith-charcoal: #1F2833;
+  --color-sith-steel: #C5C6C7;
+
+  /* App.tsx uses animate-spin-slow, which was never defined anywhere and so
+     silently did nothing. */
+  --animate-spin-slow: spin 8s linear infinite;
+}
+
+/* Also referenced by App.tsx and likewise undefined until now. Not a Tailwind
+   built-in -- hiding a scrollbar takes vendor-specific properties. */
+@utility scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
 
 :root {
   --sith-red: #E50914;
