@@ -121,7 +121,8 @@ uses to decide whether a snippet is evidence or a voice sample.
 | `src/ingestion/lore_processor.py` | Loads Wookieepedia JSON and chunks it into `Document`s with title/url metadata. |
 | `src/ingestion/script_parser.py` | Parses screenplay CSV and tab-separated dialogue files into per-line `Document`s tagged by character. |
 | `src/retrieval/vector_store.py` | `VectorStoreManager` — embeddings, FAISS index creation, similarity search, save/load. |
-| `src/retrieval/hybrid_retriever.py` | Balances lore vs. character dialogue and applies the persona filter. |
+| `src/retrieval/hybrid_retriever.py` | Fuses dense and lexical hits with RRF, balances lore vs. character dialogue, and applies the persona filter. |
+| `src/retrieval/keyword_index.py` | In-memory BM25 over the same documents as the dense index, for the proper nouns embeddings miss. |
 | `src/llm/persona_manager.py` | Persona definitions, system-prompt templates, and context formatting. |
 | `src/llm/gemini_wrapper.py` | Gemini chat wrapper with `chat()` and `stream_chat()`. |
 | `src/observability/metrics.py` | Prometheus metric families (`holocron_*`) and persona label normalization. |
@@ -447,11 +448,11 @@ python scripts/build_index.py          # or --require-dialogue to refuse a lore-
 python scripts/run_retrieval_eval.py
 ```
 
-The current baseline, over an index of 1,963 chunks (3 lore, 1,960 dialogue):
+The current scores, over an index of 1,963 chunks (3 lore, 1,960 dialogue):
 
 ```
 case                               hit   recall  rank  missed
-lore-sith-code-passion             NO    0.00    -     title=Code of the Sith,phrase=Peace is a lie
+lore-sith-code-passion             yes   1.00    2
 lore-sith-code-paraphrase          yes   1.00    1
 lore-rule-of-two-bane              yes   1.00    1
 lore-rule-of-two-apprentice        yes   1.00    1
@@ -459,25 +460,30 @@ lore-threepio-protocol             yes   1.00    1
 dialogue-vader-lack-of-faith       NO    0.00    -     speaker=VADER,phrase=lack of faith
 dialogue-vader-plans-interrogation yes   1.00    1
 dialogue-vader-force-is-strong     NO    0.00    -     speaker=VADER,phrase=Force is strong
-mixed-sith-philosophy-vader        yes   0.50    1     title=Code of the Sith
+mixed-sith-philosophy-vader        yes   0.50    2     title=Code of the Sith
 persona-filter-excludes-others     yes   1.00    1
 
   dialogue   cases=4   hit_rate=0.500 recall@k=0.500
-  lore       cases=5   hit_rate=0.800 recall@k=0.800
+  lore       cases=5   hit_rate=1.000 recall@k=1.000
   mixed      cases=1   hit_rate=1.000 recall@k=0.500
-cases=10 k=4 recall@k=0.650 hit_rate=0.700 mrr=0.700 empty=0
+cases=10 k=4 recall@k=0.750 hit_rate=0.800 mrr=0.700 empty=0
 ```
 
-That is not a good score, and publishing it is the point. Three real weaknesses fall out of it immediately:
+**Dense-only, before BM25 fusion was added,** the same suite scored `recall@k=0.650 hit_rate=0.700 mrr=0.700`,
+with lore at `hit_rate=0.800`. Publishing the worse number was the point — everything below came out of reading
+it:
 
-- **"What is the Code of the Sith?" does not retrieve the Code of the Sith**, while the near-verbatim
-  `lore-sith-code-paraphrase` retrieves it at rank 1. A question-shaped query embeds further from the passage
-  than the passage's own words do — the standard argument for query rewriting or a reranker.
-- **Both misses on the dialogue side are the two shortest lines in the suite** ("I find your lack of faith
-  disturbing", "The Force is strong with this one"). 30-character chunks compete badly against 500-character
-  lore chunks in a single flat index; this is a chunking problem, not a query problem.
-- **Proper nouns land, paraphrases do not.** `lore-rule-of-two-bane` hits on "Darth Bane" at rank 1 — which is
-  the case for hybrid BM25 + dense retrieval rather than a larger embedding model.
+- **"What is the Code of the Sith?" did not retrieve the Code of the Sith**, while the near-verbatim
+  `lore-sith-code-paraphrase` retrieved it at rank 1. Meanwhile `lore-rule-of-two-bane`, whose expectation is
+  the literal string "Darth Bane", hit at rank 1 too. Proper nouns landing while paraphrases missed is the
+  argument for a lexical scorer rather than a larger embedding model, and adding one took lore retrieval to
+  100%.
+- **MRR did not move**, because fusion is a reordering: two cases gained a rank and `mixed-sith-philosophy-vader`
+  lost one. Hit rate is what improved. A single headline number would have hidden both halves of that.
+- **Both remaining misses are the two shortest lines in the suite** ("I find your lack of faith disturbing",
+  "The Force is strong with this one"). 30-character chunks compete badly against 500-character lore chunks in
+  one index, and BM25 does not fix it because those lines are short *and* common-worded. That is a chunking
+  problem and it is the next thing to fix.
 
 Scores break out by corpus because the failure this project actually has is a missing corpus, and a
 whole-suite hit rate near 50% reads as mediocre retrieval rather than as half the index being absent.

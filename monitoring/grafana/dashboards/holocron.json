@@ -2,26 +2,38 @@
   "uid": "holocron-rag",
   "title": "Sith Holocron — RAG backend",
   "description": "Retrieval, generation and HTTP health for the Sith Holocron API. Panels reference the holocron_* families defined in src/observability/metrics.py plus the http_* families from prometheus-fastapi-instrumentator.",
-  "tags": ["holocron", "rag"],
+  "tags": [
+    "holocron",
+    "rag"
+  ],
   "timezone": "browser",
   "editable": true,
   "schemaVersion": 39,
   "version": 1,
   "refresh": "10s",
-  "time": { "from": "now-1h", "to": "now" },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
   "templating": {
     "list": [
       {
         "name": "persona",
         "label": "Persona",
         "type": "query",
-        "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "holocron-prometheus"
+        },
         "query": "label_values(holocron_chat_requests_total, persona)",
         "refresh": 2,
         "includeAll": true,
         "allValue": ".*",
         "multi": true,
-        "current": { "text": "All", "value": "$__all" }
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
       }
     ]
   },
@@ -30,7 +42,12 @@
       "type": "row",
       "id": 100,
       "title": "Startup facts",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "collapsed": false,
       "panels": []
     },
@@ -39,27 +56,69 @@
       "id": 1,
       "title": "Index loaded",
       "description": "0 means every retrieval returns nothing and every answer is ungrounded — while the API still returns HTTP 200. This is the first panel to look at.",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
       "targets": [
-        { "refId": "A", "expr": "holocron_index_loaded", "instant": true }
+        {
+          "refId": "A",
+          "expr": "holocron_index_loaded",
+          "instant": true
+        }
       ],
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "colorMode": "background",
         "graphMode": "none"
       },
       "fieldConfig": {
         "defaults": {
           "mappings": [
-            { "type": "value", "options": { "0": { "text": "NO INDEX", "color": "red", "index": 0 } } },
-            { "type": "value", "options": { "1": { "text": "loaded", "color": "green", "index": 1 } } }
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "NO INDEX",
+                  "color": "red",
+                  "index": 0
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "loaded",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
           ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
             ]
           }
         },
@@ -70,50 +129,166 @@
       "type": "stat",
       "id": 2,
       "title": "Vectors",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 4, "w": 5, "x": 4, "y": 1 },
-      "targets": [{ "refId": "A", "expr": "holocron_index_vectors", "instant": true }],
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "graphMode": "none" },
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 4,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "holocron_index_vectors",
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
     },
     {
       "type": "stat",
       "id": 3,
       "title": "Documents",
       "description": "Normally equal to the vector count. A gap means the docstore and the index disagree.",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 4, "w": 5, "x": 9, "y": 1 },
-      "targets": [{ "refId": "A", "expr": "holocron_index_documents", "instant": true }],
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "graphMode": "none" },
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 9,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "holocron_index_documents",
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
     },
     {
       "type": "stat",
       "id": 4,
       "title": "Embedding dim",
       "description": "384 for all-MiniLM-L6-v2. Anything else means the index was built with a different model than the one now loaded.",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 4, "w": 5, "x": 14, "y": 1 },
-      "targets": [{ "refId": "A", "expr": "holocron_index_dimension", "instant": true }],
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "graphMode": "none" },
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 14,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "holocron_index_dimension",
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
     },
     {
       "type": "stat",
       "id": 5,
       "title": "Personas",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 4, "w": 5, "x": 19, "y": 1 },
-      "targets": [{ "refId": "A", "expr": "holocron_personas_loaded", "instant": true }],
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "graphMode": "none" },
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 19,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "holocron_personas_loaded",
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
     },
-
     {
       "type": "row",
       "id": 101,
       "title": "Chat endpoint",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
       "collapsed": false,
       "panels": []
     },
@@ -122,8 +297,16 @@
       "id": 10,
       "title": "Chat requests by outcome",
       "description": "success / error / disconnected. Every one of these is HTTP 200 on the wire, so this panel — not the HTTP status graph — is where chat failures show up.",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 6 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 6
+      },
       "targets": [
         {
           "refId": "A",
@@ -134,12 +317,57 @@
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
-          "custom": { "fillOpacity": 15, "lineWidth": 1 }
+          "custom": {
+            "fillOpacity": 15,
+            "lineWidth": 1
+          }
         },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "error" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] },
-          { "matcher": { "id": "byName", "options": "success" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] },
-          { "matcher": { "id": "byName", "options": "disconnected" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } }] }
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "success"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "disconnected"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "yellow"
+                }
+              }
+            ]
+          }
         ]
       }
     },
@@ -148,8 +376,16 @@
       "id": 11,
       "title": "Chat errors by phase and type",
       "description": "phase=retrieval fails before the response starts; phase=llm_stream fails after the headers are gone and can only ever be seen here.",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 6 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 6
+      },
       "targets": [
         {
           "refId": "A",
@@ -157,15 +393,32 @@
           "legendFormat": "{{phase}} / {{error_type}}"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "fillOpacity": 15, "lineWidth": 1 } }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "fillOpacity": 15,
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      }
     },
     {
       "type": "timeseries",
       "id": 12,
       "title": "Time to first token",
       "description": "Measured from request arrival, so it includes retrieval and prompt assembly — the whole wait before text appears. This is the number the user feels.",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 6 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 6
+      },
       "targets": [
         {
           "refId": "A",
@@ -183,15 +436,32 @@
           "legendFormat": "p99"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "s", "custom": { "fillOpacity": 0, "lineWidth": 2 } }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      }
     },
     {
       "type": "timeseries",
       "id": 13,
       "title": "Stream duration p95 by outcome",
       "description": "Disconnected streams are truncated by definition, so keeping them on their own series stops them dragging the success percentile down.",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 14 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 14
+      },
       "targets": [
         {
           "refId": "A",
@@ -199,14 +469,31 @@
           "legendFormat": "{{outcome}} p95"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "s", "custom": { "fillOpacity": 0, "lineWidth": 2 } }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      }
     },
     {
       "type": "timeseries",
       "id": 14,
       "title": "SSE frames written",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 14 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 14
+      },
       "targets": [
         {
           "refId": "A",
@@ -214,15 +501,32 @@
           "legendFormat": "{{persona}}"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "fillOpacity": 15, "lineWidth": 1 } }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cps",
+          "custom": {
+            "fillOpacity": 15,
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      }
     },
     {
       "type": "timeseries",
       "id": 15,
       "title": "Share of streams abandoned",
       "description": "Normal user behaviour rather than a fault, but a sudden rise usually means answers got slow enough that people stopped waiting.",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 14 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 14
+      },
       "targets": [
         {
           "refId": "A",
@@ -235,17 +539,24 @@
           "unit": "percentunit",
           "min": 0,
           "max": 1,
-          "custom": { "fillOpacity": 20, "lineWidth": 1 }
+          "custom": {
+            "fillOpacity": 20,
+            "lineWidth": 1
+          }
         },
         "overrides": []
       }
     },
-
     {
       "type": "row",
       "id": 102,
       "title": "Retrieval",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
       "collapsed": false,
       "panels": []
     },
@@ -254,8 +565,16 @@
       "id": 20,
       "title": "retrieve() duration",
       "description": "FAISS is local and CPU-bound; this should sit in the tens of milliseconds. Seconds here means the embedding model is being reloaded or the process is starved.",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 23 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 23
+      },
       "targets": [
         {
           "refId": "A",
@@ -268,15 +587,32 @@
           "legendFormat": "p95"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "s", "custom": { "fillOpacity": 0, "lineWidth": 2 } }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      }
     },
     {
       "type": "timeseries",
       "id": 21,
       "title": "Documents returned per call",
       "description": "k is 4 and the retriever never returns more. A mean below 4 means the index is thin or the persona filter dropped every dialogue hit — answers are quietly less grounded than they look.",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 23 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 23
+      },
       "targets": [
         {
           "refId": "A",
@@ -288,12 +624,21 @@
         "defaults": {
           "unit": "short",
           "min": 0,
-          "custom": { "fillOpacity": 15, "lineWidth": 2 },
+          "custom": {
+            "fillOpacity": 15,
+            "lineWidth": 2
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 4 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 4
+              }
             ]
           }
         },
@@ -305,8 +650,16 @@
       "id": 22,
       "title": "Corpus mix (lore vs dialogue)",
       "description": "The observable form of the lore_weight rebalance: lore supplies facts, dialogue supplies voice. One series collapsing to zero means the hybrid retriever has stopped being hybrid.",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 23 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 23
+      },
       "targets": [
         {
           "refId": "A",
@@ -315,7 +668,17 @@
         }
       ],
       "fieldConfig": {
-        "defaults": { "unit": "cps", "custom": { "fillOpacity": 40, "lineWidth": 1, "stacking": { "mode": "normal", "group": "A" } } },
+        "defaults": {
+          "unit": "cps",
+          "custom": {
+            "fillOpacity": 40,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
         "overrides": []
       }
     },
@@ -324,8 +687,16 @@
       "id": 23,
       "title": "Candidates fetched vs documents kept",
       "description": "FAISS over-fetches k*3 before filtering. The gap between these two lines is how much the persona filter is discarding.",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 31 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 31
+      },
       "targets": [
         {
           "refId": "A",
@@ -338,14 +709,31 @@
           "legendFormat": "kept"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cps",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      }
     },
     {
       "type": "timeseries",
       "id": 24,
       "title": "Retrieval errors",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 31 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 31
+      },
       "targets": [
         {
           "refId": "A",
@@ -353,14 +741,64 @@
           "legendFormat": "{{error_type}}"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "fillOpacity": 15, "lineWidth": 1 } }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "fillOpacity": 15,
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      }
     },
-
+    {
+      "type": "timeseries",
+      "id": 25,
+      "title": "Which retriever surfaced the answer",
+      "description": "Documents the LLM actually saw, attributed to the dense index, the BM25 keyword index, or both. The 'lexical' and 'both' series going to zero is the only signal that the keyword index failed to build -- a missing keyword index degrades retrieval silently rather than raising, so dense-only traffic looks identical to healthy traffic everywhere else.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 39
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (retriever) (rate(holocron_retrieval_source_total{persona=~\"$persona\"}[$__rate_interval]))",
+          "legendFormat": "{{retriever}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cps",
+          "custom": {
+            "fillOpacity": 40,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      }
+    },
     {
       "type": "row",
       "id": 103,
       "title": "Gemini",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 39 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 47
+      },
       "collapsed": false,
       "panels": []
     },
@@ -368,8 +806,16 @@
       "type": "timeseries",
       "id": 30,
       "title": "LLM calls by method and outcome",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 40 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 48
+      },
       "targets": [
         {
           "refId": "A",
@@ -377,15 +823,32 @@
           "legendFormat": "{{method}} / {{outcome}}"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "fillOpacity": 15, "lineWidth": 1 } }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "fillOpacity": 15,
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      }
     },
     {
       "type": "timeseries",
       "id": 31,
       "title": "Model think time (first chunk)",
       "description": "Measured at the wrapper, so unlike the chat TTFT panel this excludes retrieval — the difference between the two is time spent on our side.",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 40 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 48
+      },
       "targets": [
         {
           "refId": "A",
@@ -398,14 +861,31 @@
           "legendFormat": "p95"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "s", "custom": { "fillOpacity": 0, "lineWidth": 2 } }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      }
     },
     {
       "type": "timeseries",
       "id": 32,
       "title": "LLM stream duration p95 by outcome",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 40 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 48
+      },
       "targets": [
         {
           "refId": "A",
@@ -413,28 +893,70 @@
           "legendFormat": "{{outcome}} p95"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "s", "custom": { "fillOpacity": 0, "lineWidth": 2 } }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      }
     },
     {
       "type": "timeseries",
       "id": 33,
       "title": "Generated output",
       "description": "Chunks and characters, not billing tokens — the streaming API does not report a token count, so these are the honest proxies available.",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 48 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 56
+      },
       "targets": [
-        { "refId": "A", "expr": "sum(rate(holocron_llm_stream_chunks_total[$__rate_interval]))", "legendFormat": "chunks/s" },
-        { "refId": "B", "expr": "sum(rate(holocron_llm_response_characters_total[$__rate_interval]))", "legendFormat": "chars/s" }
+        {
+          "refId": "A",
+          "expr": "sum(rate(holocron_llm_stream_chunks_total[$__rate_interval]))",
+          "legendFormat": "chunks/s"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(holocron_llm_response_characters_total[$__rate_interval]))",
+          "legendFormat": "chars/s"
+        }
       ],
-      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cps",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      }
     },
     {
       "type": "timeseries",
       "id": 34,
       "title": "Prompt size sent to the model",
       "description": "System prompt + retrieved context + query. A step change here without a matching change in traffic means the context assembly changed shape.",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 48 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 56
+      },
       "targets": [
         {
           "refId": "A",
@@ -442,14 +964,28 @@
           "legendFormat": "mean chars per call"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "custom": { "fillOpacity": 15, "lineWidth": 2 } }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "fillOpacity": 15,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      }
     },
-
     {
       "type": "row",
       "id": 104,
       "title": "HTTP",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 56 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 64
+      },
       "collapsed": false,
       "panels": []
     },
@@ -458,8 +994,16 @@
       "id": 40,
       "title": "Requests by handler and status",
       "description": "From prometheus-fastapi-instrumentator. Remember that a failed chat still appears here as 200 — cross-reference the chat error panel above.",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 57 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 65
+      },
       "targets": [
         {
           "refId": "A",
@@ -467,14 +1011,31 @@
           "legendFormat": "{{handler}} {{status}}"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "fillOpacity": 15, "lineWidth": 1 } }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "fillOpacity": 15,
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      }
     },
     {
       "type": "timeseries",
       "id": 41,
       "title": "Request duration p95 by handler",
-      "datasource": { "type": "prometheus", "uid": "holocron-prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 57 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "holocron-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 65
+      },
       "targets": [
         {
           "refId": "A",
@@ -482,7 +1043,16 @@
           "legendFormat": "{{handler}}"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "s", "custom": { "fillOpacity": 0, "lineWidth": 2 } }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      }
     }
   ]
 }

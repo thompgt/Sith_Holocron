@@ -4,7 +4,21 @@ from langchain_core.documents import Document
 from src.retrieval.hybrid_retriever import HybridRetriever
 
 
-class MockVectorStore:
+class DenseOnlyStore:
+    """Base for stubs that exercise the dense path in isolation.
+
+    all_documents() returning nothing is what switches the lexical half off:
+    HybridRetriever builds its BM25 index from the loaded FAISS index, so a
+    store with no documents to enumerate has no lexical index to build. The
+    tests below are about the balance/filter/backfill logic, and fusing a second
+    ranker into them would change what they measure. Fusion has its own tests.
+    """
+
+    def all_documents(self):
+        return []
+
+
+class MockVectorStore(DenseOnlyStore):
     def search(self, query, k=4):
         # Return a mix of lore and dialogue
         return [
@@ -34,7 +48,7 @@ def test_persona_filtering_logic(hybrid_retriever):
             assert doc.metadata.get("character") == "VADER"
 
 
-class AliasVectorStore:
+class AliasVectorStore(DenseOnlyStore):
     """Dialogue credited the way the corpora actually credit it."""
 
     def __init__(self, speakers):
@@ -86,7 +100,7 @@ def test_unknown_persona_falls_back_instead_of_matching_nothing():
     assert _speakers(docs) == {"VADER"}
 
 
-class SplitVectorStore:
+class SplitVectorStore(DenseOnlyStore):
     """One lore surplus and one dialogue surplus, neither enough on its own."""
 
     def search(self, query, k=4):
@@ -120,3 +134,151 @@ def test_backfill_returns_k_whenever_the_pools_can_cover_it(k, lore_weight):
     docs = retriever.retrieve("q", character="VADER", k=k, lore_weight=lore_weight)
 
     assert len(docs) == k
+
+
+# --- lexical fusion --------------------------------------------------------
+
+
+class FusionStore:
+    """A store whose dense ranking is deliberately wrong for the query.
+
+    The dense side returns filler first and the answer last; the lexical side,
+    built over the same documents, should pull the answer forward. That is the
+    exact shape of the failure the retrieval eval measured -- a paraphrase-shaped
+    query missing a passage whose own words are in the corpus.
+    """
+
+    ANSWER = Document(
+        page_content="The Rule of Two was established by Darth Bane.",
+        metadata={"type": "lore", "title": "Rule of Two"},
+    )
+    FILLER = [
+        Document(page_content=f"Unrelated passage {n} about droids.", metadata={"type": "lore"})
+        for n in range(6)
+    ]
+
+    def search(self, query, k=4):
+        return [*self.FILLER, self.ANSWER][:k]
+
+    def all_documents(self):
+        return [*self.FILLER, self.ANSWER]
+
+
+def test_lexical_fusion_pulls_an_exact_match_forward():
+    retriever = HybridRetriever(vector_store_manager=FusionStore())
+
+    docs = retriever.retrieve("Darth Bane", k=3)
+
+    assert docs[0].page_content == FusionStore.ANSWER.page_content
+
+
+def test_dense_only_retrieval_misses_it_without_fusion():
+    """Pins that the test above is measuring fusion and not something else."""
+    retriever = HybridRetriever(vector_store_manager=FusionStore(), use_keyword=False)
+
+    docs = retriever.retrieve("Darth Bane", k=3)
+
+    assert FusionStore.ANSWER.page_content not in [d.page_content for d in docs]
+
+
+def test_fusion_does_not_duplicate_a_document_both_retrievers_return():
+    retriever = HybridRetriever(vector_store_manager=FusionStore())
+
+    docs = retriever.retrieve("Darth Bane droids", k=6)
+
+    assert len(docs) == len({d.page_content for d in docs})
+
+
+def test_retrieval_survives_a_store_with_nothing_to_enumerate():
+    """A missing lexical index must degrade retrieval, not break it."""
+    retriever = HybridRetriever(vector_store_manager=MockVectorStore())
+
+    assert retriever.keyword_index is None
+    assert retriever.retrieve("Sith", k=2)
+
+
+def test_keyword_index_is_built_once_and_reused():
+    store = FusionStore()
+    retriever = HybridRetriever(vector_store_manager=store)
+
+    assert retriever.keyword_index is retriever.keyword_index
+
+
+def test_rrf_rewards_agreement_over_a_single_strong_opinion():
+    """A document both rankers place well beats one only the first ranks first.
+
+    The separation has to be real to show up: with RRF_K=60 the gap between
+    rank 1 and rank 3 is under a thousandth, which is the point of that constant
+    -- adjacent top ranks are near-ties, and agreement is what breaks them. So
+    the favourite is ranked 1st and 10th while the agreed document is 2nd twice.
+
+    The assertion is on their relative order rather than on first place: a filler
+    document ranked 3rd and 1st scores fractionally above the agreed document,
+    which is correct behaviour and not what this test is about.
+    """
+    from src.retrieval.hybrid_retriever import reciprocal_rank_fusion
+
+    favourite = Document(page_content="only the dense side likes this")
+    agreed = Document(page_content="both sides like this")
+    filler = [Document(page_content=f"filler {n}") for n in range(8)]
+
+    fused = reciprocal_rank_fusion(
+        [
+            [favourite, agreed, *filler],
+            [filler[0], agreed, *filler[1:], favourite],
+        ],
+        key=lambda d: d.page_content,
+    )
+    order = [document.page_content for document in fused]
+
+    assert order.index(agreed.page_content) < order.index(favourite.page_content)
+
+
+def test_rrf_on_an_empty_second_list_preserves_the_first_ordering():
+    from src.retrieval.hybrid_retriever import reciprocal_rank_fusion
+
+    ranked = [Document(page_content=str(n)) for n in range(4)]
+    fused = reciprocal_rank_fusion([ranked, []], key=lambda d: d.page_content)
+
+    assert [d.page_content for d in fused] == [d.page_content for d in ranked]
+
+
+def _source_counts(persona="other"):
+    from src.observability import metrics
+
+    return {
+        retriever: metrics.RETRIEVAL_SOURCE.labels(
+            persona=persona, retriever=retriever
+        )._value.get()
+        for retriever in ("dense", "lexical", "both")
+    }
+
+
+def test_returned_documents_are_attributed_to_a_retriever():
+    """A broken lexical half is otherwise invisible.
+
+    BM25 contributing nothing looks exactly like BM25 agreeing with the dense
+    ranking, and both look like healthy retrieval everywhere else in the
+    dashboard.
+    """
+    before = _source_counts()
+    retriever = HybridRetriever(vector_store_manager=FusionStore())
+
+    docs = retriever.retrieve("Darth Bane", k=3)
+
+    after = _source_counts()
+    recorded = sum(after[key] - before[key] for key in after)
+    assert recorded == len(docs)
+    # The answer is returned by both retrievers, so it must not be booked as
+    # dense-only -- that is the number someone would read as "BM25 is idle".
+    assert after["both"] > before["both"]
+
+
+def test_no_attribution_is_recorded_when_fusion_did_not_run():
+    """The series stops rather than reporting everything as dense-only."""
+    before = _source_counts()
+    retriever = HybridRetriever(vector_store_manager=MockVectorStore())
+
+    retriever.retrieve("Sith", k=2)
+
+    assert _source_counts() == before

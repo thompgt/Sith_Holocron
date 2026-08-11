@@ -88,13 +88,29 @@ RETRIEVAL_DOCUMENTS_BY_TYPE = Counter(
     ["persona", "source_type"],
 )
 
-# Candidates come out of FAISS before filtering; comparing this to the returned
-# total shows how much the character filter is discarding.
+# Candidates come out of the retrievers before filtering; comparing this to the
+# returned total shows how much the character filter is discarding.
 RETRIEVAL_CANDIDATES = Counter(
     "holocron_retrieval_candidates_total",
-    "Raw candidates returned by the FAISS over-fetch (k*3) before the persona "
-    "filter and rebalance are applied.",
+    "Candidates available after the k*3 over-fetch and lexical fusion, before "
+    "the persona filter and rebalance are applied.",
     ["persona"],
+)
+
+# Which retriever actually surfaced each document the LLM ended up seeing.
+#
+# Without this, a broken lexical half is invisible: BM25 contributing nothing
+# looks exactly like BM25 agreeing with the dense ranking, and both look like
+# perfectly healthy retrieval. The "lexical" series going to zero is the signal
+# that the keyword index failed to build -- which it does silently, because a
+# missing keyword index degrades retrieval rather than raising.
+#
+# Three bounded label values, so no cardinality risk.
+RETRIEVAL_SOURCE = Counter(
+    "holocron_retrieval_source_total",
+    "Documents returned by retrieve(), by which retriever surfaced them: "
+    "dense only, lexical only, or both.",
+    ["persona", "retriever"],
 )
 
 RETRIEVAL_ERRORS = Counter(
