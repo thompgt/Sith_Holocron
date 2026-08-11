@@ -116,6 +116,7 @@ uses to decide whether a snippet is evidence or a voice sample.
 | Path | Purpose |
 | --- | --- |
 | `src/main.py` | Interactive Rich CLI; also bootstraps the vector index if it does not exist. |
+| `src/ingestion/pipeline.py` | Corpus discovery and index building with no CLI and no LLM attached, so an index can be built without a TTY or an API key. |
 | `src/api/server.py` | FastAPI app: `GET /healthz`, `GET /api/personas`, SSE-streaming `POST /api/chat`, `GET /metrics`. Builds the RAG engine in the `lifespan` handler and refuses to start without an index. |
 | `src/ingestion/lore_processor.py` | Loads Wookieepedia JSON and chunks it into `Document`s with title/url metadata. |
 | `src/ingestion/script_parser.py` | Parses screenplay CSV and tab-separated dialogue files into per-line `Document`s tagged by character. |
@@ -132,6 +133,10 @@ uses to decide whether a snippet is evidence or a voice sample.
 | `scripts/synthesize_dataset.py` | Builds the instruction-tuning JSONL from dialogue + lore. |
 | `tests/` | `pytest` suite for parsers, vector store, retriever, persona manager, and Gemini wrapper. |
 | `src/eval/persona_auditor.py` | `PersonaAuditor` — end-to-end RAG cycle plus heuristic tone/grounding checks. |
+| `src/eval/retrieval_eval.py` | Retrieval-only eval: recall@k, hit rate, MRR, rank of the first correct document. No LLM call. |
+| `src/eval/cases/retrieval.json` | The frozen eval cases, each checked against corpus content that is actually in the repo. |
+| `scripts/build_index.py` | Non-interactive index build. `--require-dialogue` refuses to write a lore-only index. |
+| `scripts/run_retrieval_eval.py` | Runs the eval suite against a real index. `--min-hit-rate` / `--min-mrr` turn it into a gate. |
 | `data/raw/` | Source corpora: lore JSON, prequel CSVs, original-trilogy script text. |
 | `data/processed/` | Normalized dialogue JSON and the synthesized instruction dataset. |
 | `data/vector_store/` | Generated FAISS index (gitignored). |
@@ -411,12 +416,13 @@ pip install -r requirements-dev.txt && ruff check .   # the linter CI runs
 
 The first `pytest` run downloads `all-MiniLM-L6-v2` (~90 MB) and takes a few minutes; later runs are quick.
 
-`.github/workflows/ci.yml` runs both halves on every push and pull request:
+`.github/workflows/ci.yml` runs three jobs on every push and pull request:
 
-| Job | Steps |
-| --- | --- |
-| `backend` | `ruff check .`, then `pytest` on Python 3.13 |
-| `frontend` | `npm ci`, `npx tsc -b`, `npx vite build` |
+| Job | Steps | Blocking |
+| --- | --- | --- |
+| `backend` | `ruff check .`, then `pytest` on Python 3.13 | yes |
+| `frontend` | `npm ci`, `npx tsc -b`, `npx vite build` | yes |
+| `retrieval-eval` | fetch corpora, build a real index, run the retrieval eval | no — reports only |
 
 No Gemini key is needed — the wrapper tests pass an explicit mock key and the API tests use a stub LLM — but
 `ChatGoogleGenerativeAI` insists on *some* key at construction, so CI supplies an obviously fake one.
@@ -424,6 +430,65 @@ No Gemini key is needed — the wrapper tests pass an explicit mock key and the 
 `ruff.toml` is committed deliberately: without a config in the repo, ruff walks up the filesystem and can pick
 up whatever `pyproject.toml` sits above the checkout, which is how a clean local run and a failing CI run
 manage to coexist.
+
+`retrieval-eval` is the only job that touches real embeddings over real data. The other two never fetch a
+corpus and every retrieval test stubs the vector store, so an upstream corpus vanishing or a chunking change
+tanking recall would pass both of them. Its report lands in the run's step summary and its per-case JSON in the
+`retrieval-eval` artifact.
+
+### 7. Measure retrieval
+
+`pytest` proves the retriever does what it was told. It does not prove that asking about the Rule of Two
+returns the Rule of Two — every retrieval test stubs the vector store, so recall is untested by construction.
+`src/eval/retrieval_eval.py` measures that, over a real index, with no LLM in the loop:
+
+```bash
+python scripts/build_index.py          # or --require-dialogue to refuse a lore-only index
+python scripts/run_retrieval_eval.py
+```
+
+The current baseline, over an index of 1,963 chunks (3 lore, 1,960 dialogue):
+
+```
+case                               hit   recall  rank  missed
+lore-sith-code-passion             NO    0.00    -     title=Code of the Sith,phrase=Peace is a lie
+lore-sith-code-paraphrase          yes   1.00    1
+lore-rule-of-two-bane              yes   1.00    1
+lore-rule-of-two-apprentice        yes   1.00    1
+lore-threepio-protocol             yes   1.00    1
+dialogue-vader-lack-of-faith       NO    0.00    -     speaker=VADER,phrase=lack of faith
+dialogue-vader-plans-interrogation yes   1.00    1
+dialogue-vader-force-is-strong     NO    0.00    -     speaker=VADER,phrase=Force is strong
+mixed-sith-philosophy-vader        yes   0.50    1     title=Code of the Sith
+persona-filter-excludes-others     yes   1.00    1
+
+  dialogue   cases=4   hit_rate=0.500 recall@k=0.500
+  lore       cases=5   hit_rate=0.800 recall@k=0.800
+  mixed      cases=1   hit_rate=1.000 recall@k=0.500
+cases=10 k=4 recall@k=0.650 hit_rate=0.700 mrr=0.700 empty=0
+```
+
+That is not a good score, and publishing it is the point. Three real weaknesses fall out of it immediately:
+
+- **"What is the Code of the Sith?" does not retrieve the Code of the Sith**, while the near-verbatim
+  `lore-sith-code-paraphrase` retrieves it at rank 1. A question-shaped query embeds further from the passage
+  than the passage's own words do — the standard argument for query rewriting or a reranker.
+- **Both misses on the dialogue side are the two shortest lines in the suite** ("I find your lack of faith
+  disturbing", "The Force is strong with this one"). 30-character chunks compete badly against 500-character
+  lore chunks in a single flat index; this is a chunking problem, not a query problem.
+- **Proper nouns land, paraphrases do not.** `lore-rule-of-two-bane` hits on "Darth Bane" at rank 1 — which is
+  the case for hybrid BM25 + dense retrieval rather than a larger embedding model.
+
+Scores break out by corpus because the failure this project actually has is a missing corpus, and a
+whole-suite hit rate near 50% reads as mediocre retrieval rather than as half the index being absent.
+
+Pass `--min-hit-rate` / `--min-mrr` to turn a run into a gate; without them it only reports. Exit code 1 means
+a floor was breached, 2 means the suite could not run at all — "retrieval got worse" and "there was nothing to
+measure" are different problems and this project has shipped both.
+
+Every expectation in `src/eval/cases/retrieval.json` was checked against corpus content that is in the repo, so
+a failure means retrieval changed rather than that the case was aspirational. Add a case whenever a retrieval
+bug is fixed; the suite is meant to grow into a record of what this system has gotten wrong before.
 
 ### Other commands
 
