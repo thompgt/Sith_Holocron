@@ -11,6 +11,7 @@ itself live here. src/main.py keeps the console output; this module returns
 findings instead of printing them.
 """
 
+import hashlib
 import os
 from dataclasses import dataclass, field
 
@@ -112,6 +113,150 @@ def build_index(
         )
 
     manager = vs_manager or VectorStoreManager(persist_directory=persist_directory)
-    manager.add_documents(documents)
+    unique = dedupe(documents)
+    manager.add_documents(unique, ids=[chunk_id(doc) for doc in unique])
     manager.save()
     return manager
+
+
+# --- incremental rebuilds --------------------------------------------------
+
+#: Metadata fields that participate in a chunk's identity. Deliberately not the
+#: whole metadata dict: "source" is an absolute-ish path that differs between
+#: machines and CI, and including it would make every chunk look new on any
+#: checkout at a different path.
+IDENTITY_FIELDS = ("type", "title", "character")
+
+
+def chunk_id(document: Document) -> str:
+    """A stable id derived from a chunk's content and identifying metadata.
+
+    Content-derived rather than positional: chunk #7 of an article is a
+    different chunk after the article is re-scraped and re-split, but the *text*
+    of an unchanged passage hashes the same either way. That is what lets a
+    rebuild re-embed only what actually changed.
+
+    The trailing separator matters -- without one, ("ab", "c") and ("a", "bc")
+    hash identically and two distinct chunks would collide into one id.
+    """
+    digest = hashlib.sha256()
+    for field_name in IDENTITY_FIELDS:
+        digest.update(str(document.metadata.get(field_name) or "").encode("utf-8"))
+        digest.update(b"\x00")
+    digest.update(document.page_content.encode("utf-8"))
+    return digest.hexdigest()
+
+
+def dedupe(documents: list[Document]) -> list[Document]:
+    """One document per chunk id, first occurrence kept.
+
+    The corpora really do contain duplicates: chunk overlap can emit an
+    identical passage twice and a screenplay repeats short lines verbatim. The
+    real corpus in this repo yields 1,963 documents and 1,908 distinct ids.
+
+    Duplicates must not reach FAISS. Its docstore is keyed by id, so a repeated
+    id leaves the vector count higher than the docstore count -- and in an
+    incremental sync the duplicate would be counted as new and re-added on every
+    run, a rebuild that never converges.
+    """
+    seen: dict[str, Document] = {}
+    for document in documents:
+        seen.setdefault(chunk_id(document), document)
+    return list(seen.values())
+
+
+@dataclass
+class SyncPlan:
+    """What an incremental rebuild would change, before it changes it."""
+
+    added: list[Document] = field(default_factory=list)
+    removed: list[str] = field(default_factory=list)
+    unchanged: int = 0
+    #: Ids the corpus no longer contains that prune=False chose to keep. Held
+    #: separately rather than by clearing `removed`, so "nothing to prune" and
+    #: "pruning was suppressed" stay distinguishable -- the second is a state a
+    #: partial local corpus can sit in for a long time without noticing.
+    retained: list[str] = field(default_factory=list)
+
+    @property
+    def changed(self) -> bool:
+        return bool(self.added or self.removed)
+
+    @property
+    def is_total_churn(self) -> bool:
+        """Everything in the index is being replaced -- almost never intended.
+
+        The realistic cause is not a changed corpus but an index built before
+        chunk ids were content-derived: it holds UUID keys, so no id can match
+        and a "sync" re-embeds the whole corpus while deleting the old one. That
+        is correct but slower than a plain rebuild, so it is worth saying.
+        """
+        return bool(self.removed) and self.unchanged == 0
+
+    def describe(self) -> str:
+        text = (
+            f"{len(self.added)} new, {len(self.removed)} removed, "
+            f"{self.unchanged} unchanged"
+        )
+        if self.retained:
+            text += f", {len(self.retained)} kept (pruning off)"
+        return text
+
+
+def plan_sync(documents: list[Document], known_ids: set[str]) -> SyncPlan:
+    """Diff a freshly-read corpus against the ids already in an index.
+
+    Pure: takes the id set, returns the plan, touches nothing. Kept separate
+    from apply_sync so a caller can show the plan before spending money and
+    minutes on embeddings -- and so the diff logic is testable without FAISS.
+    """
+    wanted = {chunk_id(document): document for document in dedupe(documents)}
+    new_ids = wanted.keys() - known_ids
+
+    return SyncPlan(
+        added=[document for cid, document in wanted.items() if cid in new_ids],
+        removed=sorted(known_ids - wanted.keys()),
+        unchanged=len(wanted.keys() & known_ids),
+    )
+
+
+def sync_index(
+    documents: list[Document],
+    persist_directory: str = "data/vector_store",
+    vs_manager: VectorStoreManager | None = None,
+    prune: bool = True,
+) -> tuple[VectorStoreManager, SyncPlan]:
+    """Bring an existing index in line with the corpus, re-embedding only deltas.
+
+    Falls back to a full build when there is no index yet. With prune=False,
+    chunks that have left the corpus stay in the index -- useful when the corpus
+    on this machine is knowingly partial (a rate-limited scrape, or corpora that
+    were not fetched) and dropping what is missing would lose real data.
+    """
+    if not documents:
+        raise ValueError(
+            "Refusing to sync against zero documents -- with prune=True that "
+            "would empty the index, and an empty index answers every query "
+            "with nothing without erroring."
+        )
+
+    manager = vs_manager or VectorStoreManager(persist_directory=persist_directory)
+    if not manager.load():
+        # Report the plan build_index will actually carry out, deduped -- not the
+        # raw corpus, or the caller's "N new" would not match the index's size.
+        return build_index(documents, vs_manager=manager), SyncPlan(added=dedupe(documents))
+
+    plan = plan_sync(documents, manager.known_ids())
+    if not prune:
+        plan.retained, plan.removed = plan.removed, []
+
+    if plan.added:
+        manager.add_documents(plan.added, ids=[chunk_id(doc) for doc in plan.added])
+    manager.delete(plan.removed)
+
+    # Only rewrite when something moved: save() re-digests the index files for
+    # the manifest, and a no-op save would churn them for nothing.
+    if plan.changed:
+        manager.save()
+
+    return manager, plan

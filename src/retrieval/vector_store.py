@@ -48,14 +48,56 @@ class VectorStoreManager:
         self.index_name = index_name
         self.vector_store: FAISS | None = None
 
-    def add_documents(self, documents: list[Document]):
+    def add_documents(self, documents: list[Document], ids: list[str] | None = None):
         """
         Adds documents to the vector store. Creates a new index if one doesn't exist.
+
+        `ids` are FAISS docstore keys. Passing content-derived ids is what makes
+        an incremental rebuild possible: the index then records which chunks it
+        holds, so a later build can diff against it instead of re-embedding the
+        whole corpus. See src.ingestion.pipeline.chunk_id.
         """
         if self.vector_store is None:
-            self.vector_store = FAISS.from_documents(documents, self.embeddings)
+            self.vector_store = FAISS.from_documents(documents, self.embeddings, ids=ids)
         else:
-            self.vector_store.add_documents(documents)
+            self.vector_store.add_documents(documents, ids=ids)
+
+    def all_documents(self) -> list[Document]:
+        """Every document in the index, for building a secondary index over it.
+
+        The lexical index in keyword_index.py is derived from this rather than
+        re-read from the corpora, so the two halves of retrieval can never
+        disagree about what is searchable -- a keyword hit on a chunk the dense
+        index does not hold would be unreachable through the retriever anyway.
+        """
+        if self.vector_store is None:
+            return []
+        docstore = self.vector_store.docstore
+        return [
+            document
+            for document in (
+                docstore.search(doc_id)
+                for doc_id in self.vector_store.index_to_docstore_id.values()
+            )
+            # InMemoryDocstore.search returns an error *string* for a missing id
+            # rather than raising, so filter on type instead of truthiness.
+            if isinstance(document, Document)
+        ]
+
+    def known_ids(self) -> set[str]:
+        """Docstore keys currently in the index; empty when there is no index.
+
+        Read from the index itself rather than a sidecar file, so the record of
+        what is indexed cannot drift away from what is actually indexed.
+        """
+        if self.vector_store is None:
+            return set()
+        return set(self.vector_store.index_to_docstore_id.values())
+
+    def delete(self, ids: list[str]) -> None:
+        """Remove documents by docstore key. A no-op for an empty id list."""
+        if ids and self.vector_store is not None:
+            self.vector_store.delete(ids)
 
     def search(self, query: str, k: int = 4) -> list[Document]:
         """

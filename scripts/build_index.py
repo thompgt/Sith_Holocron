@@ -20,12 +20,37 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.ingestion.pipeline import build_index, collect_documents  # noqa: E402
+from src.ingestion.pipeline import build_index, collect_documents, sync_index  # noqa: E402
+from src.retrieval.vector_store import IndexTrustError  # noqa: E402
 
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--index-dir", default="data/vector_store")
+    parser.add_argument(
+        "--incremental",
+        action="store_true",
+        help=(
+            "diff the corpus against the existing index and embed only what "
+            "changed, instead of rebuilding from scratch. Falls back to a full "
+            "build when there is no index yet."
+        ),
+    )
+    parser.add_argument(
+        "--no-prune",
+        action="store_true",
+        help=(
+            "with --incremental, keep chunks that are no longer in the local "
+            "corpus. Use it when this machine's corpus is knowingly partial -- a "
+            "rate-limited scrape, or corpora that were never fetched -- so a "
+            "sync does not delete data it simply cannot see."
+        ),
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="with --incremental, report the diff and exit without embedding anything",
+    )
     parser.add_argument(
         "--require-dialogue",
         action="store_true",
@@ -64,11 +89,69 @@ def main(argv=None) -> int:
         print(f"WARNING: {message}", file=sys.stderr)
 
     print(
-        f"Indexing {len(report.documents)} documents "
-        f"({report.lore_count} lore, {report.dialogue_count} dialogue)..."
+        f"Read {len(report.documents)} documents "
+        f"({report.lore_count} lore, {report.dialogue_count} dialogue)."
     )
-    manager = build_index(report.documents, persist_directory=args.index_dir)
-    print(f"Wrote {manager.index_path} and {manager.manifest_path}")
+
+    if not args.incremental:
+        print("Building a fresh index...")
+        manager = build_index(report.documents, persist_directory=args.index_dir)
+        print(f"Wrote {manager.index_path} and {manager.manifest_path}")
+        return 0
+
+    try:
+        if args.dry_run:
+            return _report_dry_run(args, report)
+        manager, plan = sync_index(
+            report.documents,
+            persist_directory=args.index_dir,
+            prune=not args.no_prune,
+        )
+    except IndexTrustError as exc:
+        # An incremental sync loads the existing index, so it is subject to the
+        # same trust check. Do not offer to bypass it here.
+        print(f"Existing index failed verification:\n{exc}", file=sys.stderr)
+        return 1
+
+    print(f"Sync: {plan.describe()}")
+    _warn_on_total_churn(plan)
+    if plan.changed:
+        print(f"Wrote {manager.index_path} and {manager.manifest_path}")
+    else:
+        print("Index already matches the corpus; nothing rewritten.")
+    return 0
+
+
+def _warn_on_total_churn(plan) -> None:
+    if plan.is_total_churn:
+        print(
+            "Every chunk in the index is being replaced. If the corpus did not "
+            "actually change, the index predates content-addressed chunk ids "
+            "and holds UUID keys that can never match -- drop --incremental "
+            "once to rebuild it, after which syncs will be cheap.",
+            file=sys.stderr,
+        )
+
+
+def _report_dry_run(args, report) -> int:
+    """Show what a sync would change without embedding anything."""
+    # Imported here rather than at module scope: the plan is pure and needs no
+    # index, but constructing a VectorStoreManager loads the embedding model,
+    # which is the cost a dry run exists to avoid paying twice.
+    from src.ingestion.pipeline import plan_sync
+    from src.retrieval.vector_store import VectorStoreManager
+
+    manager = VectorStoreManager(persist_directory=args.index_dir)
+    if not manager.load():
+        print(f"No index at {args.index_dir}; a sync would build all "
+              f"{len(report.documents)} documents.")
+        return 0
+
+    plan = plan_sync(report.documents, manager.known_ids())
+    if args.no_prune:
+        plan.retained, plan.removed = plan.removed, []
+    print(f"Would sync: {plan.describe()}")
+    _warn_on_total_churn(plan)
     return 0
 
 

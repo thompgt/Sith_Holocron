@@ -135,7 +135,7 @@ uses to decide whether a snippet is evidence or a voice sample.
 | `src/eval/persona_auditor.py` | `PersonaAuditor` — end-to-end RAG cycle plus heuristic tone/grounding checks. |
 | `src/eval/retrieval_eval.py` | Retrieval-only eval: recall@k, hit rate, MRR, rank of the first correct document. No LLM call. |
 | `src/eval/cases/retrieval.json` | The frozen eval cases, each checked against corpus content that is actually in the repo. |
-| `scripts/build_index.py` | Non-interactive index build. `--require-dialogue` refuses to write a lore-only index. |
+| `scripts/build_index.py` | Non-interactive index build. `--incremental` re-embeds only what changed; `--require-dialogue` refuses to write a lore-only index. |
 | `scripts/run_retrieval_eval.py` | Runs the eval suite against a real index. `--min-hit-rate` / `--min-mrr` turn it into a gate. |
 | `data/raw/` | Source corpora: lore JSON, prequel CSVs, original-trilogy script text. |
 | `data/processed/` | Normalized dialogue JSON and the synthesized instruction dataset. |
@@ -489,6 +489,30 @@ measure" are different problems and this project has shipped both.
 Every expectation in `src/eval/cases/retrieval.json` was checked against corpus content that is in the repo, so
 a failure means retrieval changed rather than that the case was aspirational. Add a case whenever a retrieval
 bug is fixed; the suite is meant to grow into a record of what this system has gotten wrong before.
+
+### 8. Rebuild the index incrementally
+
+A full rebuild re-embeds all 1,963 chunks, which is most of a minute on CPU and grows linearly with the corpus.
+Adding one Wookieepedia page should not cost that:
+
+```bash
+python scripts/build_index.py --incremental --dry-run   # what would change, embedding nothing
+python scripts/build_index.py --incremental             # embed only the delta
+```
+
+Chunk ids are a SHA-256 of the chunk's text plus its identifying metadata (`type`, `title`, `character`) and
+are used as the FAISS docstore keys, so the index itself records what it holds — there is no sidecar manifest
+to drift out of sync with reality. Ids are content-derived rather than positional because chunk #7 of an
+article is a different chunk after a re-scrape and re-split, while the *text* of an untouched passage hashes
+the same either way.
+
+`--no-prune` keeps chunks that are no longer in the local corpus. Reach for it when this machine's corpus is
+knowingly partial — a rate-limited scrape, or corpora that were never fetched — so a sync does not delete data
+it merely cannot see.
+
+An index built before ids were content-derived holds UUID keys that can never match, so the first
+`--incremental` run against it reports total churn and warns that a plain rebuild is cheaper. `--dry-run`
+surfaces that before spending the embeddings.
 
 ### Other commands
 
