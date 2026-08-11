@@ -7,8 +7,7 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.text import Text
 
-from src.ingestion.lore_processor import LoreProcessor
-from src.ingestion.script_parser import ScriptParser
+from src.ingestion.pipeline import build_index, collect_documents
 from src.llm.gemini_wrapper import GeminiChatWrapper
 from src.llm.persona_manager import PersonaManager
 from src.retrieval.hybrid_retriever import HybridRetriever
@@ -37,39 +36,17 @@ class SithHolocronCLI:
 
     def _bootstrap_data(self):
         console.print("[bold yellow]Holocron energy low. Initializing data core...[/bold yellow]")
-        lore_proc = LoreProcessor()
-        script_parser = ScriptParser()
 
-        docs = []
-        missing = []
+        # Corpus discovery and the build itself live in src.ingestion.pipeline so
+        # that scripts/build_index.py can produce an identical index without a
+        # TTY or an API key. This method is now only the console reporting.
+        report = collect_documents()
+        docs = report.documents
+        dialogue_count = report.dialogue_count
 
-        # Ingest Lore
-        lore_file = "data/raw/lore.json"
-        if os.path.exists(lore_file):
-            docs.extend(lore_proc.process_file(lore_file))
-        else:
-            missing.append(lore_file)
-
-        # Ingest Scripts. These live in third-party corpora fetched by
-        # scripts/fetch_corpora.py -- absent them the index is lore-only and the
-        # retriever's dialogue half is silently empty, so say so loudly.
-        ot_script = "data/raw/star-wars-scripts/Text_files/EpisodeIV_dialogues.txt"
-        if os.path.exists(ot_script):
-            docs.extend(script_parser.parse_tab_txt(ot_script))
-        else:
-            missing.append(ot_script)
-
-        prequel_script = "data/raw/prequel-csv/star_wars_1_data.csv"
-        if os.path.exists(prequel_script):
-            docs.extend(script_parser.parse_csv(prequel_script, sep=";", char_col="from", text_col="text"))
-        else:
-            missing.append(prequel_script)
-
-        dialogue_count = sum(1 for d in docs if d.metadata.get("type") == "dialogue")
-
-        if missing:
+        if report.missing:
             console.print("[bold yellow]Missing corpora:[/bold yellow]")
-            for path in missing:
+            for path in report.missing:
                 console.print(f"  - {path}")
             console.print(
                 "[bold yellow]Run [white]python scripts/fetch_corpora.py[/white] "
@@ -86,8 +63,7 @@ class SithHolocronCLI:
                 "Persona voice matching will find nothing."
             )
 
-        self.vs_manager.add_documents(docs)
-        self.vs_manager.save()
+        build_index(docs, vs_manager=self.vs_manager)
         console.print(
             f"[bold green]Data core stabilized.[/bold green] "
             f"{len(docs)} documents ({dialogue_count} dialogue)."
