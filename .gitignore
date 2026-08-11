@@ -33,5 +33,10 @@ data/vector_store/
 data/test_vector_db/
 data/hybrid_test_db/
 
+# Retrieval eval runs (scripts/run_retrieval_eval.py --json). Machine-specific
+# output of a specific index; the frozen cases in src/eval/cases/ are the part
+# worth tracking, and the numbers a run should beat are recorded in the README.
+data/eval/
+
 # Test caches
 .pytest_cache/
