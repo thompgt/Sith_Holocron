@@ -1,0 +1,96 @@
+{
+  "_comment": [
+    "Frozen retrieval cases. Every expectation here was checked against the",
+    "corpora actually in the repo -- the three lore pages in data/raw/lore.json",
+    "and the Episode IV dialogue file from the star-wars-scripts submodule --",
+    "so a failure means retrieval changed, not that the case was aspirational.",
+    "",
+    "corpus: 'lore' cases need data/raw/lore.json to still contain that page.",
+    "The scraper is rate-limited by Fandom and the current lore.json holds only",
+    "3 of the 8 pages it requests, so scripts/run_retrieval_eval.py reports",
+    "these separately instead of scoring a missing page as a retrieval miss.",
+    "",
+    "Add a case whenever a retrieval bug is fixed. That is the whole point: the",
+    "suite grows into a record of what this system has gotten wrong before."
+  ],
+  "cases": [
+    {
+      "id": "lore-sith-code-passion",
+      "query": "What is the Code of the Sith?",
+      "corpus": "lore",
+      "expect": [{ "title": "Code of the Sith", "phrase": "Peace is a lie" }],
+      "note": "The canonical lore lookup. If this misses, the lore half of the index is broken."
+    },
+    {
+      "id": "lore-sith-code-paraphrase",
+      "query": "Through passion I gain strength, through strength power",
+      "corpus": "lore",
+      "expect": [{ "title": "Code of the Sith" }],
+      "note": "Near-verbatim query. Dense retrieval should find this trivially; if it does not, embeddings are misconfigured."
+    },
+    {
+      "id": "lore-rule-of-two-bane",
+      "query": "Who established the Rule of Two and why only two Sith?",
+      "corpus": "lore",
+      "expect": [{ "title": "Rule of Two", "phrase": "Darth Bane" }],
+      "note": "Proper noun in the expectation -- exactly where dense-only retrieval is weakest and BM25 would help."
+    },
+    {
+      "id": "lore-rule-of-two-apprentice",
+      "query": "Must the Sith apprentice kill their master?",
+      "corpus": "lore",
+      "expect": [{ "title": "Rule of Two", "phrase": "kill the master" }],
+      "note": "The answer lives in a later chunk of the article than the Bane sentence, so this and the case above should hit different chunks."
+    },
+    {
+      "id": "lore-threepio-protocol",
+      "query": "How many forms of communication is the protocol droid fluent in?",
+      "corpus": "lore",
+      "expect": [{ "title": "C-3PO", "phrase": "six million" }],
+      "note": "Non-Sith lore. Guards against a retriever that has quietly become a Sith-only index."
+    },
+    {
+      "id": "dialogue-vader-lack-of-faith",
+      "query": "Vader threatening an officer who doubts the Force",
+      "character": "VADER",
+      "corpus": "dialogue",
+      "expect": [{ "speaker": "VADER", "phrase": "lack of faith" }],
+      "note": "The most-quoted line in the corpus, and the case that proves the persona speaker filter resolves VADER."
+    },
+    {
+      "id": "dialogue-vader-plans-interrogation",
+      "query": "Vader demanding to know where the stolen plans were sent",
+      "character": "VADER",
+      "corpus": "dialogue",
+      "expect": [{ "speaker": "VADER", "phrase": "plans" }],
+      "note": "Several Vader lines satisfy this; the case asserts the filter returns his voice, not which line."
+    },
+    {
+      "id": "dialogue-vader-force-is-strong",
+      "query": "Vader sensing a powerful presence in the Force",
+      "character": "VADER",
+      "corpus": "dialogue",
+      "expect": [{ "speaker": "VADER", "phrase": "Force is strong" }],
+      "note": "Short line, ~34 characters. Short chunks embed poorly next to 500-character lore chunks; a miss here is a chunking problem, not a query problem."
+    },
+    {
+      "id": "mixed-sith-philosophy-vader",
+      "query": "What does the dark side promise its followers?",
+      "character": "VADER",
+      "corpus": "mixed",
+      "expect": [
+        { "title": "Code of the Sith" },
+        { "speaker": "VADER" }
+      ],
+      "note": "The one case that grades the lore/dialogue rebalance itself: it expects both halves back in a single k=4 result set, which only holds if lore_weight is doing its job."
+    },
+    {
+      "id": "persona-filter-excludes-others",
+      "query": "the Rebel Alliance and the Death Star plans",
+      "character": "VADER",
+      "corpus": "dialogue",
+      "expect": [{ "speaker": "VADER" }],
+      "note": "A query whose best dialogue matches are mostly spoken by Leia, Han and Tarkin. Asserts the persona filter still surfaces a Vader line rather than falling back to whoever ranked highest."
+    }
+  ]
+}
