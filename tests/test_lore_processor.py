@@ -39,3 +39,17 @@ def test_lore_processor_metadata(sample_lore_json):
         assert "url" in chunk.metadata
         assert "title" in chunk.metadata
         assert "source" in chunk.metadata
+
+
+def test_lore_chunks_are_typed_as_lore(sample_lore_json):
+    """The type key is a cross-module contract, not decoration.
+
+    HybridRetriever routes on it, PersonaManager.format_context renders on it,
+    and PersonaAuditor's grounding check used to require it -- so when lore
+    chunks shipped without it, grounding scored 0% against every real index
+    while every test passed, because the tests all hand-built their Documents.
+    """
+    chunks = LoreProcessor().process_file(sample_lore_json)
+
+    assert chunks
+    assert {chunk.metadata["type"] for chunk in chunks} == {"lore"}

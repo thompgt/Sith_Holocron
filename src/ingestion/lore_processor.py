@@ -26,11 +26,21 @@ class LoreProcessor:
             if not content:
                 continue
 
-            # Extract metadata
+            # Extract metadata.
+            #
+            # "type" was absent here while ScriptParser set type="dialogue", so
+            # real lore chunks carried no type at all. HybridRetriever survived
+            # that by defaulting the key to "lore", but PersonaAuditor's
+            # grounding check compared == "lore" and therefore scored every
+            # response against a real index as ungrounded. Every test that
+            # touches lore builds its Documents by hand with type="lore", so
+            # nothing caught the mismatch. Set it at the source instead of
+            # teaching each consumer to default it.
             metadata = {
                 "url": item.get("url", ""),
                 "title": item.get("title", ""),
-                "source": file_path
+                "source": file_path,
+                "type": "lore",
             }
 
             # Split content into chunks

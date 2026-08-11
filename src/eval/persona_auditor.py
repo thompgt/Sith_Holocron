@@ -63,8 +63,11 @@ class PersonaAuditor:
         haystack = response.lower()
         return any(
             doc.page_content[:20].lower() in haystack
+            # Default the key rather than requiring it, matching HybridRetriever.
+            # LoreProcessor now stamps type="lore", but an index built before
+            # that change has chunks with no type and must still count as lore.
             for doc in docs
-            if doc.metadata.get("type") == "lore" and doc.page_content
+            if doc.metadata.get("type", "lore") != "dialogue" and doc.page_content
         )
 
     def audit_response(self, character: str, query: str, k: int = 4) -> dict:
