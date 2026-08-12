@@ -97,13 +97,34 @@ class KeywordIndex:
         total = len(self.documents)
         return math.log(1 + (total - document_frequency + 0.5) / (document_frequency + 0.5))
 
-    def search(self, query: str, k: int = 4) -> list[Document]:
+    def search(self, query: str, k: int = 4, predicate=None) -> list[Document]:
         """Top-k documents by BM25 score. Empty when no query term is known."""
-        return [document for document, _ in self.search_with_scores(query, k=k)]
+        return [
+            document
+            for document, _ in self.search_with_scores(query, k=k, predicate=predicate)
+        ]
 
-    def search_with_scores(self, query: str, k: int = 4) -> list[tuple[Document, float]]:
+    def search_with_scores(
+        self, query: str, k: int = 4, predicate=None
+    ) -> list[tuple[Document, float]]:
+        """`predicate` filters by metadata *before* the top-k cut.
+
+        Filtering after the cut would be a different and much worse operation:
+        a persona holding 2% of the corpus would have its lines squeezed out of
+        the top-k by everyone else's before the filter ever ran.
+        """
         if not self.documents:
             return []
+
+        allowed = (
+            None
+            if predicate is None
+            else {
+                position
+                for position, document in enumerate(self.documents)
+                if predicate(document.metadata)
+            }
+        )
 
         scores: dict[int, float] = {}
         for term in set(tokenize(query)):
@@ -112,6 +133,8 @@ class KeywordIndex:
                 continue
             idf = self._idf(term)
             for position, frequency in postings.items():
+                if allowed is not None and position not in allowed:
+                    continue
                 length_ratio = (
                     self._lengths[position] / self._average_length
                     if self._average_length

@@ -459,31 +459,45 @@ lore-rule-of-two-apprentice        yes   1.00    1
 lore-threepio-protocol             yes   1.00    1
 dialogue-vader-lack-of-faith       NO    0.00    -     speaker=VADER,phrase=lack of faith
 dialogue-vader-plans-interrogation yes   1.00    1
-dialogue-vader-force-is-strong     NO    0.00    -     speaker=VADER,phrase=Force is strong
+dialogue-vader-force-is-strong     yes   1.00    4
 mixed-sith-philosophy-vader        yes   0.50    2     title=Code of the Sith
 persona-filter-excludes-others     yes   1.00    1
 
-  dialogue   cases=4   hit_rate=0.500 recall@k=0.500
+  dialogue   cases=4   hit_rate=0.750 recall@k=0.750
   lore       cases=5   hit_rate=1.000 recall@k=1.000
   mixed      cases=1   hit_rate=1.000 recall@k=0.500
-cases=10 k=4 recall@k=0.750 hit_rate=0.800 mrr=0.700 empty=0
+cases=10 k=4 recall@k=0.850 hit_rate=0.900 mrr=0.725 empty=0
 ```
 
-**Dense-only, before BM25 fusion was added,** the same suite scored `recall@k=0.650 hit_rate=0.700 mrr=0.700`,
-with lore at `hit_rate=0.800`. Publishing the worse number was the point — everything below came out of reading
-it:
+How it got there, each step measured on the same suite and the same index:
+
+| | recall@k | hit_rate | mrr |
+| --- | --- | --- | --- |
+| dense only | 0.650 | 0.700 | 0.700 |
+| \+ BM25 fusion | 0.750 | 0.800 | 0.700 |
+| \+ persona-scoped retrieval | **0.850** | **0.900** | **0.725** |
+
+Publishing the worst number first was the point — every step below came out of reading the one before it:
 
 - **"What is the Code of the Sith?" did not retrieve the Code of the Sith**, while the near-verbatim
-  `lore-sith-code-paraphrase` retrieved it at rank 1. Meanwhile `lore-rule-of-two-bane`, whose expectation is
-  the literal string "Darth Bane", hit at rank 1 too. Proper nouns landing while paraphrases missed is the
-  argument for a lexical scorer rather than a larger embedding model, and adding one took lore retrieval to
-  100%.
-- **MRR did not move**, because fusion is a reordering: two cases gained a rank and `mixed-sith-philosophy-vader`
-  lost one. Hit rate is what improved. A single headline number would have hidden both halves of that.
-- **Both remaining misses are the two shortest lines in the suite** ("I find your lack of faith disturbing",
-  "The Force is strong with this one"). 30-character chunks compete badly against 500-character lore chunks in
-  one index, and BM25 does not fix it because those lines are short *and* common-worded. That is a chunking
-  problem and it is the next thing to fix.
+  `lore-sith-code-paraphrase` retrieved it at rank 1, and `lore-rule-of-two-bane` — whose expectation is the
+  literal string "Darth Bane" — also hit at rank 1. Proper nouns landing while paraphrases missed is the
+  argument for a lexical scorer rather than a larger embedding model. Adding one took lore retrieval to 100%.
+- **MRR did not move for fusion**, because fusion is a reordering: two cases gained a rank and
+  `mixed-sith-philosophy-vader` lost one. Hit rate is what improved. A single headline number would have hidden
+  both halves of that.
+- **The dialogue misses were not a chunk-length problem**, which is what they looked like — both were the
+  shortest lines in the suite. Instrumenting the actual candidate pools showed something else: Vader speaks 41
+  of 1,908 chunks, so a `k*3=12` general pool for *"Vader threatening an officer who doubts the Force"* came
+  back TARKIN, LEIA, BEN and a single Vader line. The persona filter ran on that pool and had almost nothing to
+  keep. Scored against Vader's own lines, the target ranked 2nd. The fix was to retrieve the persona's lines in
+  a search of their own rather than filtering them out of a general top-k — see §9.
+
+One case still misses. *"Vader threatening an officer who doubts the Force"* should retrieve "I find your lack
+of faith disturbing", and shares no content word with it: BM25 has nothing to match, and the embedding gap
+between "doubts the Force" and "lack of faith" is wider than the gap to Vader's several other Force lines. It
+is a genuine semantic miss rather than a plumbing one, and the honest fix is a reranker or query expansion, not
+another retrieval tweak.
 
 Scores break out by corpus because the failure this project actually has is a missing corpus, and a
 whole-suite hit rate near 50% reads as mediocre retrieval rather than as half the index being absent.
@@ -519,6 +533,30 @@ it merely cannot see.
 An index built before ids were content-derived holds UUID keys that can never match, so the first
 `--incremental` run against it reports total churn and warns that a plain rebuild is cheaper. `--dry-run`
 surfaces that before spending the embeddings.
+
+### 9. Why a persona gets its own search
+
+When a persona filter is active, `HybridRetriever` runs a **second, speaker-scoped pair of searches** — dense
+and lexical, both filtered to the names that persona answers to — and builds the dialogue half of the result
+from those. It does not filter dialogue out of the general top-k.
+
+That is not a micro-optimisation; filter-after-fetch could not work here at all, and the eval is what proved
+it. Vader speaks 41 of 1,908 chunks. A `k*3=12` candidate pool for *"Vader threatening an officer who doubts
+the Force"* came back:
+
+```
+TARKIN, LEIA, TARKIN, TARKIN, TARKIN, TROOPER, MOTTI, BEN, LEIA, QUI-GON, VADER, BEN
+```
+
+One Vader line, and not the right one — so the most-quoted line in the corpus was unreachable no matter how the
+rebalance was tuned. Scored against Vader's own 41 lines, the target ranks 2nd. The general pool still supplies
+lore, because lore has no persona to scope to.
+
+The cost is that FAISS has no filtered index: it fetches `fetch_k` neighbours and discards those failing the
+predicate, so `fetch_k` has to be large enough that `k` survive. For a persona holding 2% of the corpus the
+default `fetch_k=20` returns nothing, so `VectorStoreManager.search` scans the whole index when a filter is
+given. That is honest at 1,908 chunks and it is the first thing that has to change past a few hundred thousand
+— at that size the persona filter belongs in the index, not after it.
 
 ### Other commands
 

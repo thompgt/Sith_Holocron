@@ -99,15 +99,29 @@ class VectorStoreManager:
         if ids and self.vector_store is not None:
             self.vector_store.delete(ids)
 
-    def search(self, query: str, k: int = 4) -> list[Document]:
+    def search(self, query: str, k: int = 4, filter=None) -> list[Document]:
         """
         Performs a similarity search in the vector store.
+
+        `filter` is a callable over a Document's metadata. FAISS has no notion
+        of a filtered index -- it fetches `fetch_k` nearest neighbours and then
+        discards the ones that fail the predicate -- so fetch_k has to be large
+        enough that k survivors remain. A persona is a small slice of this
+        corpus (Vader speaks 41 of 1,908 chunks), and the default fetch_k of 20
+        would return nothing at all for him. Scanning the whole index is the
+        honest thing to do at this size; past a few hundred thousand chunks it
+        wants a real filtered index instead.
         """
         # Lazily load on first search if the caller never called load() itself.
         if self.vector_store is None and not self.load():
             return []
 
-        return self.vector_store.similarity_search(query, k=k)
+        if filter is None:
+            return self.vector_store.similarity_search(query, k=k)
+
+        return self.vector_store.similarity_search(
+            query, k=k, filter=filter, fetch_k=self.vector_store.index.ntotal
+        )
 
     # --- on-disk layout -------------------------------------------------
 

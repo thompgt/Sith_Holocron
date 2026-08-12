@@ -12,15 +12,29 @@ class DenseOnlyStore:
     store with no documents to enumerate has no lexical index to build. The
     tests below are about the balance/filter/backfill logic, and fusing a second
     ranker into them would change what they measure. Fusion has its own tests.
+
+    search() honours `filter` because the real one does, and a double that
+    ignored it would let a retriever that never filters pass every test here.
+    Ranking is not modelled -- these stubs return a fixed set regardless of the
+    query, which is what makes the assertions about *selection* unambiguous.
     """
+
+    def documents(self):
+        raise NotImplementedError
+
+    def search(self, query, k=4, filter=None):
+        documents = self.documents()
+        if filter is not None:
+            documents = [d for d in documents if filter(d.metadata)]
+        return documents[:k]
 
     def all_documents(self):
         return []
 
 
 class MockVectorStore(DenseOnlyStore):
-    def search(self, query, k=4):
-        # Return a mix of lore and dialogue
+    def documents(self):
+        # A mix of lore and dialogue
         return [
             Document(page_content="Fact about Sith.", metadata={"type": "lore", "title": "History"}),
             Document(page_content="Dialogue from Vader.", metadata={"type": "dialogue", "character": "VADER"})
@@ -54,7 +68,7 @@ class AliasVectorStore(DenseOnlyStore):
     def __init__(self, speakers):
         self.speakers = speakers
 
-    def search(self, query, k=4):
+    def documents(self):
         return [
             Document(
                 page_content=f"Line by {s}.",
@@ -103,7 +117,7 @@ def test_unknown_persona_falls_back_instead_of_matching_nothing():
 class SplitVectorStore(DenseOnlyStore):
     """One lore surplus and one dialogue surplus, neither enough on its own."""
 
-    def search(self, query, k=4):
+    def documents(self):
         return [
             Document(page_content="lore 1", metadata={"type": "lore"}),
             Document(page_content="lore 2", metadata={"type": "lore"}),
@@ -157,8 +171,11 @@ class FusionStore:
         for n in range(6)
     ]
 
-    def search(self, query, k=4):
-        return [*self.FILLER, self.ANSWER][:k]
+    def search(self, query, k=4, filter=None):
+        documents = [*self.FILLER, self.ANSWER]
+        if filter is not None:
+            documents = [d for d in documents if filter(d.metadata)]
+        return documents[:k]
 
     def all_documents(self):
         return [*self.FILLER, self.ANSWER]
@@ -282,3 +299,69 @@ def test_no_attribution_is_recorded_when_fusion_did_not_run():
     retriever.retrieve("Sith", k=2)
 
     assert _source_counts() == before
+
+
+# --- persona-scoped retrieval ----------------------------------------------
+
+
+class RareSpeakerStore(DenseOnlyStore):
+    """A persona who is a tiny minority of the corpus, as Vader really is.
+
+    Vader speaks 41 of 1,908 chunks. A general top-k is filled by whoever else
+    is talking, so filtering it afterwards leaves nothing -- which is exactly
+    how the eval's most-quoted line in the corpus became unreachable.
+    """
+
+    TARGET = Document(
+        page_content="I find your lack of faith disturbing.",
+        metadata={"type": "dialogue", "character": "VADER"},
+    )
+
+    def documents(self):
+        crowd = [
+            Document(
+                page_content=f"Line {n} by someone else.",
+                metadata={"type": "dialogue", "character": "TARKIN"},
+            )
+            for n in range(30)
+        ]
+        return [*crowd, self.TARGET]
+
+
+def test_a_rare_persona_is_retrieved_from_a_search_of_their_own():
+    retriever = HybridRetriever(vector_store_manager=RareSpeakerStore())
+
+    docs = retriever.retrieve("faith", character="VADER", k=4)
+
+    assert RareSpeakerStore.TARGET.page_content in [d.page_content for d in docs]
+
+
+def test_the_general_pool_alone_would_have_missed_it():
+    """Pins that the test above measures scoped retrieval, not luck.
+
+    The store returns the crowd first, so anything reading only the general
+    top-k -- and filtering it afterwards -- cannot see the target at all.
+    """
+    store = RareSpeakerStore()
+
+    general = store.search("faith", k=12)
+
+    assert RareSpeakerStore.TARGET not in general
+
+
+def test_scoped_retrieval_still_only_returns_the_personas_own_lines():
+    retriever = HybridRetriever(vector_store_manager=RareSpeakerStore())
+
+    docs = retriever.retrieve("faith", character="VADER", k=4)
+
+    assert _speakers(docs) == {"VADER"}
+
+
+def test_no_persona_filter_means_no_scoped_search():
+    """Without a character there is nothing to scope to, and dialogue comes
+    from the general pool as before."""
+    retriever = HybridRetriever(vector_store_manager=RareSpeakerStore())
+
+    docs = retriever.retrieve("faith", k=4)
+
+    assert _speakers(docs) == {"TARKIN"}

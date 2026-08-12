@@ -121,44 +121,71 @@ class HybridRetriever:
         started = time.perf_counter()
         allowed_speakers = self.pm.aliases(character)
 
+        keyword_index = self.keyword_index
+        origins: dict = {}
+
+        def fuse(dense: list[Document], lexical: list[Document]) -> list[Document]:
+            """Fuse one dense ranking with its lexical counterpart.
+
+            Records where each document came from as a side effect, so the
+            attribution metric can be computed from the returned set later.
+            """
+            for label, ranked in (("dense", dense), ("lexical", lexical)):
+                for document in ranked:
+                    origins.setdefault(document_identity(document), set()).add(label)
+            return reciprocal_rank_fusion([dense, lexical], key=document_identity)
+
         try:
-            # 1. Fetch more than k to allow for filtering and re-ranking
+            # 1. Fetch more than k to allow for filtering and re-ranking.
             raw_results = self.vs_manager.search(query, k=k*3)
-
-            # 1b. Fuse in lexical hits. The dense side is weak on the exact
-            # proper nouns a lore corpus is made of -- the retrieval eval
-            # measured a paraphrase of an indexed passage missing entirely while
-            # a "Darth Bane" query hit at rank 1. Both lists are over-fetched to
-            # k*3 so fusion has room to reorder before the balance step trims.
-            keyword_index = self.keyword_index
-            origins: dict = {}
             if keyword_index is not None:
-                lexical = keyword_index.search(query, k=k * 3)
-                for label, ranked in (("dense", raw_results), ("lexical", lexical)):
-                    for document in ranked:
-                        origins.setdefault(document_identity(document), set()).add(label)
-                raw_results = reciprocal_rank_fusion(
-                    [raw_results, lexical], key=document_identity
-                )
-
-            metrics.RETRIEVAL_CANDIDATES.labels(persona=persona_label).inc(len(raw_results))
+                # The dense side is weak on the exact proper nouns a lore corpus
+                # is made of -- the eval measured a paraphrase of an indexed
+                # passage missing entirely while a "Darth Bane" query hit at
+                # rank 1. Both lists are over-fetched to k*3 so fusion has room
+                # to reorder before the balance step trims.
+                raw_results = fuse(raw_results, keyword_index.search(query, k=k * 3))
 
             lore_docs = []
             dialogue_docs = []
+
+            # 1b. When a persona filter is active, retrieve that persona's lines
+            # in a search of their own rather than filtering them out of a
+            # general top-k.
+            #
+            # Filter-after-fetch cannot work here and the eval proved it: Vader
+            # speaks 41 of 1,908 chunks, so a k*3=12 candidate pool for "Vader
+            # threatening an officer who doubts the Force" came back as TARKIN,
+            # LEIA, BEN and one Vader line, and "I find your lack of faith
+            # disturbing" -- the most quoted line in the corpus -- was
+            # unreachable. Scored against Vader's own lines it ranks 2nd.
+            #
+            # Membership, not equality: the corpora credit Palpatine as DARTH
+            # SIDIOUS / EMPEROR, never as the persona key.
+            if allowed_speakers is not None:
+                def speaks_for_persona(metadata) -> bool:
+                    return (metadata.get("character") or "").upper().strip() in allowed_speakers
+
+                scoped = self.vs_manager.search(query, k=k * 3, filter=speaks_for_persona)
+                if keyword_index is not None:
+                    scoped = fuse(
+                        scoped,
+                        keyword_index.search(query, k=k * 3, predicate=speaks_for_persona),
+                    )
+                dialogue_docs.extend(scoped)
+
+            metrics.RETRIEVAL_CANDIDATES.labels(persona=persona_label).inc(
+                len(raw_results) + len(dialogue_docs)
+            )
 
             for doc in raw_results:
                 doc_type = doc.metadata.get("type", "lore")
 
                 if doc_type == "dialogue":
-                    # If a character filter is active, keep only lines spoken by
-                    # a name this persona answers to. Membership, not equality:
-                    # the corpora credit Palpatine as DARTH SIDIOUS / EMPEROR,
-                    # never as the persona key.
-                    if allowed_speakers is not None:
-                        speaker = (doc.metadata.get("character") or "").upper().strip()
-                        if speaker in allowed_speakers:
-                            dialogue_docs.append(doc)
-                    else:
+                    # Dialogue from the general pool is only used when no
+                    # persona filter is active; otherwise the scoped search
+                    # above already supplied it, better ranked.
+                    if allowed_speakers is None:
                         dialogue_docs.append(doc)
                 else:
                     lore_docs.append(doc)
